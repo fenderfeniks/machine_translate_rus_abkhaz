@@ -1,0 +1,25 @@
+# @package _global_
+environment:
+  name: "local"
+
+trainer:
+  max_epochs: 1
+  accelerator: auto
+  precision: "32-true"
+  limit_train_batches: 50
+  limit_val_batches: 20
+  limit_test_batches: 20
+
+data:
+  max_length: 128
+  dataloader:
+    batch_size: 2
+    num_workers: 0
+
+model:
+  compile: false
+  architecture:
+    gradient_checkpointing: false  # Экономия VRAM не нужна локально, зато быстрее
+
+api:
+  log_level: DEBUG

@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # 1. Главный ML-Сервер (FastAPI)
+  # ----------------------------------------------------
+  api:
+    image: my-company/decoder_template:api-latest
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_EXTRAS: "api" # Убрали rag
+    container_name: decoder_template_api_server
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - PROJECT_ROOT=/app
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs # Добавили маунт для логов/mlflow.db
+    restart: always
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ----------------------------------------------------
+  # 2. Воркер для обучения (Batch Job) - Запускается вручную
+  # ----------------------------------------------------
+  trainer:
+    image: my-company/decoder_template:trainer-latest
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_EXTRAS: "training"
+    container_name: decoder_template_trainer
+    profiles:
+      - training
+    command: ["python", "-m", "src.train"]
+    environment:
+      - PROJECT_ROOT=/app
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs # Заменили mlruns на logs, так как MLflow теперь пишет туда
+    restart: "no"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ----------------------------------------------------
+  # 3. Airflow (Оркестратор для локального тестирования DAG-ов)
+  # ----------------------------------------------------
+  airflow:
+    image: apache/airflow:${AIRFLOW_IMAGE_TAG:-2.8.1}
+    container_name: decoder_template_airflow
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_VAR_PROJECT_IMAGE=my-company/decoder_template:api-latest
+      - AIRFLOW_VAR_K8S_NAMESPACE=ml-pipelines
+    env_file:
+      - .env
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./deploy/airflow:/opt/airflow/deploy
+      - ./logs/airflow:/opt/airflow/logs
+    command: >
+      bash -c "airflow db init &&
+               (airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
+               airflow variables import /opt/airflow/deploy/variables.json &&
+               airflow standalone"
+    restart: unless-stopped
+
+  # ----------------------------------------------------
+  # 4. Prometheus (Сбор метрик)
+  # ----------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: decoder_template_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # ----------------------------------------------------
+  # 5. Grafana (Дашборды)
+  # ----------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: decoder_template_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # ----------------------------------------------------
+  # 6. Тонкий клиент (Streamlit Demo)
+  # ----------------------------------------------------
+  demo:
+    build:
+      context: .
+      dockerfile: demo/Dockerfile
+    container_name: decoder_template_demo
+    ports:
+      - "8501:8501"
+    environment:
+      # Обновлен URL до актуального эндпоинта классификации
+      - API_URL=http://api:8000/api/v1/generate
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  grafana_data:

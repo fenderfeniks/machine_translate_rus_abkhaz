@@ -1,0 +1,13 @@
+# @package _global_
+# configs/strings/default.yaml
+# Все пользовательские тексты — здесь. Python-код их не содержит.
+
+strings:
+  bot:
+    welcome: "Привет! Отправь мне текст, и я обработаю его."
+    error: "Произошла ошибка при генерации. Попробуй позже."
+    processing: "Генерирую ответ..."
+
+  errors:
+    gpu_unavailable: "GPU недоступен. Проверьте драйверы или измените accelerator на cpu."
+    no_checkpoint: "Чекпоинт не найден по пути: {path}"

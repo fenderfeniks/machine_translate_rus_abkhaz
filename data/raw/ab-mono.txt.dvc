@@ -1,0 +1,5 @@
+outs:
+- md5: 004d39b559096b7cc6dd34066ab1f971
+  size: 612308172
+  hash: md5
+  path: ab-mono.txt

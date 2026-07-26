@@ -1,0 +1,6 @@
+# helm/decoder-api-chart/Chart.yaml
+apiVersion: v2
+name: decoder-api-chart
+description: Helm чарт для деплоя LLM API
+version: 0.1.0
+appVersion: "1.0"

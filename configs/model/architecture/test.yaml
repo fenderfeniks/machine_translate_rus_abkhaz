@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  model_name: "HuggingFaceM4/tiny-random-LlamaForCausalLM"
+  mlflow_model_name: "tiny-random-LlamaForCausalLM"
+  architecture:
+    torch_dtype: "bfloat16"
+    attn_implementation: "sdpa"
+    gradient_checkpointing: true
+    rope_scaling: null

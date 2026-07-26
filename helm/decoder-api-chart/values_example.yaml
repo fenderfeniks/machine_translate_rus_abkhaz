@@ -1,0 +1,41 @@
+# helm/decoder-api-chart/values_example.yaml
+
+app:
+  name: decoder-template-api
+  namespace: ml-pipelines
+
+image:
+  repository: my-company/decoder_template
+  tag: api-latest
+
+config:
+  port: 8000
+  mlflowTrackingUri: "http://mlflow-service:5000"
+  modelName: "DecoderTemplateModel"
+
+resources:
+  requests:
+    cpu: "1"
+    memory: "4Gi"
+  limits:
+    cpu: "2"
+    memory: "6Gi" 
+    gpu: "1"
+
+storage:
+  dataPvcName: pvc-data
+  dataSize: 20Gi
+  logsPvcName: logs-pvc
+  logsSize: 10Gi
+  modelsPvcName: pvc-models
+  modelsSize: 30Gi
+
+# ВНИМАНИЕ: Для локального запуска скопируйте этот файл в values.yaml 
+# и заполните реальными токенами. Никогда не коммитьте values.yaml!
+secrets:
+  tgBotToken: "YOUR_TG_BOT_TOKEN"
+  hfToken: "YOUR_HF_TOKEN"
+  wandbApiKey: "YOUR_WANDB_API_KEY"
+  apiKey: "YOUR_API_KEY"
+  kaggleUsername: "YOUR_KAGGLE_USERNAME"
+  kaggleKey: "YOUR_KAGGLE_KEY"

@@ -1,0 +1,23 @@
+# @package _global_
+environment:
+  name: "prod"
+
+trainer:
+  max_epochs: 5
+  accelerator: gpu
+  precision: "bf16-mixed"
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  limit_test_batches: 1.0
+
+data:
+  max_length: 2048
+  dataloader:
+    batch_size: 8
+    num_workers: 4
+
+model:
+  compile: false
+
+api:
+  log_level: INFO

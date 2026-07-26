@@ -1,0 +1,5 @@
+outs:
+- md5: 5d4269603b9ed7e1f7b01fd35126dd34
+  size: 59023831
+  hash: md5
+  path: ab-ru-parallel.csv

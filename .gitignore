@@ -1,0 +1,91 @@
+# ==============================
+# 1. Python & Виртуальное окружение
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# ==============================
+# 2. Данные (Сырые, Обработанные и Кэш)
+# ==============================
+#data/raw/
+data/processed/
+data/interim/
+data/cache/
+*.csv
+*.tsv
+*.tgz
+*.zip
+*.tar.gz
+demo/data
+
+# ==============================
+# 3. MLOps, Логи и Кэш фреймворков
+# ==============================
+# Hydra
+outputs/
+multirun/
+.hydra/
+
+# MLflow & Logs
+mlruns/
+*.db
+mlflow.db
+logs/**
+log/
+*.log
+
+# PyTorch Lightning & Models
+lightning_logs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+/models/
+
+# Hugging Face Datasets
+.cache/
+hf_cache/
+
+.cursor/
+
+# ==============================
+# 4. Секреты и Локальные конфиги
+# ==============================
+.env
+.env.*
+!.env.example
+kaggle.json
+*.key
+deploy/k8s/secrets.yaml
+# Helm secrets
+helm/decoder-api-chart/values.yaml
+# DVC
+.dvc/config.local
+.dvc/tmp/
+
+# ==============================
+# 5. Тестирование и Линтеры
+# ==============================
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+kubeconform.exe
+
+# ==============================
+# 6. IDE и ОС
+# ==============================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+.DS_Store
+Thumbs.db

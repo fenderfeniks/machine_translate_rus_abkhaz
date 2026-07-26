@@ -1,0 +1,43 @@
+# helm/decoder-api-chart/templates/pvcs.yaml
+
+# 1. Данные
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.storage.dataPvcName }}
+  namespace: {{ .Values.app.namespace }}
+spec:
+  storageClassName: hostpath
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.dataSize }}
+---
+# 2. Логи и MLflow DB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.storage.logsPvcName }}
+  namespace: {{ .Values.app.namespace }}
+spec:
+  storageClassName: hostpath
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.logsSize }}
+---
+# 3. Веса моделей
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.storage.modelsPvcName }}
+  namespace: {{ .Values.app.namespace }}
+spec:
+  storageClassName: hostpath
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.modelsSize }}

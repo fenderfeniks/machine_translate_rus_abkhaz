@@ -1,0 +1,8 @@
+# configs/data/source/hf.yaml
+_target_: src.core.data.fetcher.RawDataFetcher
+source_type: "hf"
+raw_dir: "${paths.data_dir}/raw"
+dataset_name: "HuggingFaceH4/testing_alpaca_small"
+token: ${oc.env:HF_TOKEN,null}
+#HuggingFaceH4/testing_alpaca_small   (SFT-test)
+#wikitext-2-raw-v1  split: "train[:100]"  (CPT-test)

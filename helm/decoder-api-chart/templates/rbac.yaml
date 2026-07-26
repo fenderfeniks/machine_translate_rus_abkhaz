@@ -1,0 +1,39 @@
+# helm/decoder-api-chart/templates/rbac.yaml
+
+# 1. Создаем аккаунт, под которым будут запускаться поды KubernetesPodOperator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow-worker-sa
+  namespace: {{ .Values.app.namespace }}
+
+---
+# 2. Даем права на работу с Pods (для запуска задач) и Deployments (для rollout restart)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-worker-role
+  namespace: {{ .Values.app.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch", "list", "watch"] 
+
+---
+# 3. Связываем аккаунт с правами
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-worker-rolebinding
+  namespace: {{ .Values.app.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: airflow-worker-sa
+    namespace: {{ .Values.app.namespace }}
+roleRef:
+  kind: Role
+  name: airflow-worker-role
+  apiGroup: rbac.authorization.k8s.io

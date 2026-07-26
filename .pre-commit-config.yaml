@@ -1,0 +1,13 @@
+# .pre-commit-config.yaml
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Версия должна совпадать с той, что указана в твоем pyproject.toml
+    rev: v0.3.0
+    hooks:
+      # Запуск линтера (с авто-исправлением безопасных ошибок, например, удалением неиспользуемых импортов)
+      - id: ruff
+        args: [ --fix ]
+      # Запуск автоформатирования (заменяет Black)
+      - id: ruff-format

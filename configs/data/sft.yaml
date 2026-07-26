@@ -1,0 +1,71 @@
+# configs/data/sft.yaml
+# Сценарий 2: Supervised Fine-Tuning (суммаризация, Q&A, перевод, инструкции).
+# Переключить: data: sft в main.yaml
+
+defaults:
+  - source: local
+  - _self_
+
+paths: ${paths}
+seed: ${seed}
+
+dataset_name: "sft_dataset"
+max_length: 256
+val_split_size: 0.1
+force_reprocess: false
+
+prompt_column: "prompt"
+target_column: "completion"
+
+preprocessing_num_workers: 4
+preprocessing_batch_size: 1000
+writer_batch_size: 200
+
+transforms:
+  # 1. Сначала очищаем текст от мусора
+  - _target_: src.core.data.transforms.CleaningTransform
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    prompt_column: ${data.prompt_column}
+    target_column: ${data.target_column}
+    cleaners:
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "\\s{3,}"
+        replacement: " "
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "<[^>]+>"
+        replacement: ""
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "http[s]?://\\S+"
+        replacement: ""
+  - _target_: src.core.data.transforms.ValidationTransform
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    prompt_column: ${data.prompt_column}
+    target_column: ${data.target_column}
+
+  - _target_: src.core.data.transforms.TokenizationTransform
+    use_chat_template: false    # true если датасет в формате messages []
+    prompt_column: ${data.prompt_column}
+    target_column: ${data.target_column}
+    separator: "\n"
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    writer_batch_size: ${data.writer_batch_size}
+
+  - _target_: src.core.data.transforms.LengthFilterTransform
+    max_length: ${data.max_length}
+    num_proc: ${data.preprocessing_num_workers}
+
+# InstructionDataCollator: маскирует промпт, loss считается только по ответу
+collator:
+  _target_: src.core.data.collators.InstructionDataCollator
+  max_sequence_length: ${data.max_length}
+  mask_prompt: true
+  # response_template: "<|im_start|>assistant\n"  # раскомментировать для Варианта Б
+
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  batch_size: 8
+  num_workers: 0
+  pin_memory: false

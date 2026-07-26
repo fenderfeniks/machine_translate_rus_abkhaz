@@ -1,0 +1,4 @@
+# configs/api/telegram/default.yaml
+bot_token: ${oc.env:TG_BOT_TOKEN,""}
+# server.py обращается к cfg.api.telegram.webhook_url
+webhook_url: "${oc.env:API_DOMAIN,'http://localhost:8000'}/webhook/telegram"

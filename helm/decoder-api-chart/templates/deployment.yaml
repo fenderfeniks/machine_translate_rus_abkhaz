@@ -1,0 +1,52 @@
+# helm/decoder-api-chart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Подставляем имя из values.yaml
+  name: {{ .Values.app.name }}
+  namespace: {{ .Values.app.namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+    spec:
+      containers:
+      - name: fastapi-server
+        # Склеиваем репозиторий и тег образа
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.config.port }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.app.name }}-secrets
+        - configMapRef:
+            name: {{ .Values.app.name }}-config
+        volumeMounts:
+        - name: model-weights
+          mountPath: /app/models
+        - name: data-volume
+          mountPath: /app/data
+        resources:
+          requests:
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+            memory: {{ .Values.resources.requests.memory | quote }}
+          limits:
+            cpu: {{ .Values.resources.limits.cpu | quote }}
+            memory: {{ .Values.resources.limits.memory | quote }}
+            {{- if .Values.resources.limits.gpu }}
+            nvidia.com/gpu: {{ .Values.resources.limits.gpu | quote }}
+            {{- end }}
+      volumes:
+      - name: model-weights
+        persistentVolumeClaim:
+          claimName: pvc-models
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: pvc-data

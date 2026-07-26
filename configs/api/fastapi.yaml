@@ -1,0 +1,27 @@
+# configs/api/fastapi.yaml
+defaults:
+  - telegram: default
+  - _self_
+
+host: "0.0.0.0"
+port: ${oc.env:API_PORT,8000}
+domain: ${oc.env:API_DOMAIN,"http://localhost:8000"}
+
+concurrency_limit: 1
+
+title: ${oc.env:PROJECT_NAME,"Industrial NLP Template API"}
+description: "NLP API for Text Generation and LLM Inference"
+version: ${oc.env:PROJECT_VERSION,"0.1.0"}
+
+# server.py читает cfg.api.telegram.webhook_url — ключ должен быть здесь
+# cfg.api.telegram подтягивается из telegram/default.yaml через defaults выше
+telegram_webhook:
+  path: "/webhook/telegram"
+  url: "${api.domain}${api.telegram_webhook.path}"
+
+generation_template: "rag_qa"
+generation_static_context: ""
+
+cors_origins:
+  - "http://localhost:3000"
+  - "http://localhost:8080"

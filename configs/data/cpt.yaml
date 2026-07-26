@@ -1,0 +1,68 @@
+# configs/data/cpt.yaml
+# Сценарий 1: Continuous Pre-Training на чистом тексте.
+# Переключить: data: cpt в main.yaml
+
+defaults:
+  - source: local
+  - _self_
+
+paths: ${paths}
+seed: ${seed}
+
+dataset_name: "cpt_dataset"
+max_length: 2048
+val_split_size: 0.1
+force_reprocess: false
+
+text_column: "text"
+
+preprocessing_num_workers: 4
+preprocessing_batch_size: 1000
+writer_batch_size: 200          # Частота сброса кэша на диск (защита от OOM)
+
+transforms:
+# 1. Сначала очищаем текст от мусора
+  - _target_: src.core.data.transforms.CleaningTransform
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    prompt_column: ${data.prompt_column}
+    target_column: ${data.target_column}
+    cleaners:
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "\\s{3,}"
+        replacement: " "
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "<[^>]+>"
+        replacement: ""
+      - _target_: src.core.data.cleaners.RegexCleaner
+        pattern: "http[s]?://\\S+"
+        replacement: ""
+  - _target_: src.core.data.transforms.ValidationTransform
+    num_proc: ${data.preprocessing_num_workers}
+    text_column: ${data.text_column}
+    batch_size: ${data.preprocessing_batch_size}
+
+  - _target_: src.core.data.transforms.TokenizationTransform
+    use_chat_template: false
+    text_column: ${data.text_column}
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    writer_batch_size: ${data.writer_batch_size}
+
+  - _target_: src.core.data.transforms.SequencePackingTransform
+    packing_chunk_size: ${data.max_length}
+    drop_remainder: true
+    num_proc: ${data.preprocessing_num_workers}
+    batch_size: ${data.preprocessing_batch_size}
+    writer_batch_size: ${data.writer_batch_size}
+
+# DataCollatorForLanguageModeling: labels = input_ids, сдвиг делает модель сама
+collator:
+  _target_: transformers.DataCollatorForLanguageModeling
+  mlm: false
+
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  batch_size: 8
+  num_workers: 0
+  pin_memory: false

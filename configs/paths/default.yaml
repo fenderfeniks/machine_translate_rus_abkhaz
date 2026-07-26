@@ -1,0 +1,8 @@
+# configs/paths/default.yaml
+root_dir: "."
+data_dir: "${paths.root_dir}/data"
+hf_cache_dir: "${paths.data_dir}/cache/hf_models"
+processed_data_dir: "${paths.data_dir}/processed"
+model_dir: "${paths.root_dir}/models"
+log_dir: "${paths.root_dir}/logs"
+output_dir: "${paths.root_dir}/outputs"    # чекпоинты, артефакты обучения

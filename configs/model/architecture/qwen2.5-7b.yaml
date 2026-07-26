@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  mlflow_model_name: "Qwen2.5-7B-Instruct"
+  architecture:
+    torch_dtype: "bfloat16"
+    attn_implementation: "flash_attention_2"
+    gradient_checkpointing: true
+    rope_scaling: null

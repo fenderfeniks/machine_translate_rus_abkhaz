@@ -1,0 +1,14 @@
+# .dockerignore
+.venv/
+__pycache__/
+*.pyc
+.env
+.git/
+.gitignore
+data/
+models/
+notebooks/
+# Логи и аутпуты Гидры
+logs/
+outputs/
+multirun/

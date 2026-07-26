@@ -1,0 +1,70 @@
+# configs/main.yaml
+defaults:
+  - paths: default
+  - logger: mlflow
+  - environment: local
+  - data: sft                   # cpt | sft
+  - model: default
+  - trainer: default
+  - api: fastapi
+  - prompts: default
+  - strings: default
+  - _self_
+
+seed: 42
+project_name: "industrial_nlp_template"
+resume_training: false
+text: "Вставь одиночный запрос сюда для теста scripts/infer.py"
+# LightningModule
+model_module:
+  _target_: src.training.module.CausalLMLightningModule
+  optimizer_cfg:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 2.0e-4
+    weight_decay: 0.01
+  scheduler_cfg:
+    _target_: transformers.get_cosine_schedule_with_warmup
+    _partial_: true
+    num_warmup_steps: 100
+
+# DataModule — source читается из data.source, не отсюда
+datamodule:
+  _target_: src.core.data.builder.NLPDataModule
+  _recursive_: false
+  data_cfg: ${data}
+
+# Параметры генерации — используются в train/callbacks и infer.py
+generation_kwargs:
+  max_new_tokens: 256
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  repetition_penalty: 1.15
+  no_repeat_ngram_size: 3
+
+# Параметры инференса (infer.py)
+inference:
+  quantization:
+    enabled: false
+    bits: 4
+  # generation_kwargs для инференса — по умолчанию берём глобальные
+  generation_kwargs: ${generation_kwargs}
+  # Батч-инференс: путь к входному jsonl файлу (null = одиночный запрос)
+  input_file: null
+  output_file: "predictions.jsonl"
+
+# Параметры оценки (eval.py)
+# ckpt_path передаётся через CLI: python eval.py ckpt_path=/path/to/weights
+ckpt_path: null
+metrics_output_path: "metrics.json"
+drift_threshold: null           # null = проверка дрифта отключена
+drift_metric_key: "test_perplexity"
+
+# Hydra — рабочая директория и логи
+hydra:
+  run:
+    dir: ${paths.log_dir}/${project_name}/runs/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  job:
+    chdir: true

@@ -1,0 +1,48 @@
+# configs/trainer/default.yaml
+# optimizer и scheduler живут в main.yaml → model_module.optimizer_cfg / scheduler_cfg
+# и инстанциируются в CausalLMLightningModule.configure_optimizers()
+
+_target_: pytorch_lightning.Trainer
+max_epochs: 3
+accelerator: "cpu"
+devices: 1
+precision: "bf16-mixed"
+gradient_clip_val: 1.0
+accumulate_grad_batches: 4
+log_every_n_steps: 10
+val_check_interval: 1.0
+logger: ${logger}
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    dirpath: "${paths.output_dir}/checkpoints/"
+    filename: "epoch_{epoch:02d}-val_loss_{val_loss:.4f}"
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 2
+    save_last: true
+    auto_insert_metric_name: false
+
+  lr_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: "step"
+
+  device_stats:
+    _target_: pytorch_lightning.callbacks.DeviceStatsMonitor
+
+  model_freezing:
+    _target_: src.training.callbacks.ModelFreezingCallback
+    finetuning_type: ${model.finetuning_type}
+  
+  generation_eval:
+    _target_: src.training.callbacks.GenerationEvaluationCallback
+    model_name: ${model.model_name}
+    num_random: 5
+    generation_batch_size: 2
+    generation_kwargs: ${generation_kwargs}
+    fixed_samples:
+      - prompt: "Напиши SQL запрос для выборки пользователей старше 25 лет."
+        target: "SELECT * FROM users WHERE age > 25;"
+      - prompt: "Объясни Gradient Checkpointing двумя предложениями."
+        target: "Метод экономии VRAM: активации не хранятся, а пересчитываются при backprop. Замедляет обучение, но позволяет увеличить batch size."

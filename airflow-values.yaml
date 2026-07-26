@@ -1,0 +1,27 @@
+executor: "KubernetesExecutor"
+
+webserver:
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    # TODO: заменить на секрет перед продом
+    password: admin
+    firstName: Admin
+    lastName: User
+    email: admin@example.com
+
+dags:
+  gitSync:
+    enabled: true
+    repo: https://github.com/fenderfeniks/decoder-template-detection-ml-system-mlops.git
+    branch: master
+    subPath: dags
+
+config:
+  kubernetes_executor:
+    # ИСПРАВЛЕНО: согласовано с is_delete_operator_pod=True в операторах
+    # При успехе — поды удаляются (экономим ресурсы)
+    # При падении — оставляем для дебага
+    delete_worker_pods: 'True'
+    delete_worker_pods_on_failure: 'False'

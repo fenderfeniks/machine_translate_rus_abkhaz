@@ -1,0 +1,17 @@
+# helm/decoder-api-chart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  # Название сервиса
+  name: {{ .Values.app.name }}-service
+  namespace: {{ .Values.app.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    # Ищем поды с таким же лейблом, как имя приложения
+    app: {{ .Values.app.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      # Порт контейнера берем из конфига
+      targetPort: {{ .Values.config.port }}
