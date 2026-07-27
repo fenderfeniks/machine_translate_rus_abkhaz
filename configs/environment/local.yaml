@@ -11,7 +11,7 @@ trainer:
   limit_test_batches: 20
 
 data:
-  max_length: 128
+  max_length: 512
   max_samples: 0.1
   dataloader:
     batch_size: 2

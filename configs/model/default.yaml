@@ -1,6 +1,6 @@
 # configs/model/default.yaml
 defaults:
-  - architecture: qwen2.5-7b
+  - architecture: Qwen3-4B
   - tokenizer: default
   - peft: lora
   - quantization: 4bit

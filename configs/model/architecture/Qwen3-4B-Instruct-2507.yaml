@@ -1,7 +1,7 @@
 # @package _global_
 model:
-  model_name: "Qwen/Qwen3.5-9B"
-  mlflow_model_name: "Qwen3.5-9B"
+  model_name: "Qwen/Qwen3-4B-Instruct-2507"
+  mlflow_model_name: "Qwen3-4B-Instruct-2507"
   architecture:
     torch_dtype: "bfloat16"
     attn_implementation: "sdpa"
