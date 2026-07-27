@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 from datasets import DatasetDict, load_from_disk
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizerBase
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,29 @@ class NLPDataModule(pl.LightningDataModule):
         dataset_name = self.data_cfg.get("dataset_name", "nlp_dataset")
 
         self.processed_dir = Path(self.data_cfg.paths.processed_data_dir) / f"{dataset_name}_processed_{config_hash}"
+
+    def _maybe_subsample(self, dataset: Any, name: str) -> Any:
+        """Обрезает датасет до max_samples если задано в конфиге.
+
+        Args:
+            dataset: Исходный датасет.
+            name: Название сплита для логирования (train/validation/test).
+
+        Returns:
+            Обрезанный или исходный датасет.
+        """
+        max_samples = self.data_cfg.get("max_samples", None)
+        if max_samples is None:
+            return dataset
+
+        n = len(dataset)
+        if isinstance(max_samples, float):
+            k = max(1, int(n * max_samples))
+        else:
+            k = min(int(max_samples), n)
+
+        logger.info("max_samples: %s %d → %d примеров (%s)", name, n, k, max_samples)
+        return dataset.select(range(k))
 
     def prepare_data(self) -> None:
         """Подготавливает данные: скачивает, трансформирует и кэширует на диск."""
@@ -97,9 +121,9 @@ class NLPDataModule(pl.LightningDataModule):
 
         processed_dataset = DatasetDict(
             {
-                "train": _apply_transforms(raw_train),
-                "validation": _apply_transforms(raw_val),
-                "test": _apply_transforms(raw_test),
+                "train": _apply_transforms(self._maybe_subsample(raw_train, "train")),
+                "validation": _apply_transforms(self._maybe_subsample(raw_val, "validation")),
+                "test": _apply_transforms(self._maybe_subsample(raw_test, "test")),
             }
         )
 
@@ -122,26 +146,43 @@ class NLPDataModule(pl.LightningDataModule):
 
         self.collator = instantiate(self.data_cfg.collator, tokenizer=self.tokenizer)
 
-    def train_dataloader(self) -> Any:
-        return instantiate(
-            self.data_cfg.dataloader,
+    def _dataloader_kwargs(self) -> dict:
+        """Извлекает параметры DataLoader из конфига, исключая служебные ключи Hydra.
+
+        instantiate() ненадёжен для DataLoader с callable collate_fn —
+        Hydra пытается резолвить любой dict-like объект, включая коллатор,
+        что приводит к TypeError: 'DictConfig' object is not callable.
+        Поэтому DataLoader создаётся напрямую, а параметры извлекаются вручную.
+
+        Returns:
+            Словарь kwargs для передачи в DataLoader (без _target_ и управляемых ключей).
+        """
+        dl_cfg = OmegaConf.to_container(self.data_cfg.dataloader, resolve=True)
+        # Убираем ключи которые передаём явно или которые не нужны DataLoader
+        for key in ("_target_", "dataset", "collate_fn", "shuffle"):
+            dl_cfg.pop(key, None)
+        return dl_cfg
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
             dataset=self.train_dataset,
             collate_fn=self.collator,
             shuffle=True,
+            **self._dataloader_kwargs(),
         )
 
-    def val_dataloader(self) -> Any:
-        return instantiate(
-            self.data_cfg.dataloader,
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
             dataset=self.val_dataset,
             collate_fn=self.collator,
             shuffle=False,
+            **self._dataloader_kwargs(),
         )
 
-    def test_dataloader(self) -> Any:
-        return instantiate(
-            self.data_cfg.dataloader,
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
             dataset=self.test_dataset,
             collate_fn=self.collator,
             shuffle=False,
+            **self._dataloader_kwargs(),
         )

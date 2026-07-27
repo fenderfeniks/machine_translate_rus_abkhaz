@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  model_name: "microsoft/Phi-4-mini-instruct"
+  mlflow_model_name: "Phi-4-mini-instruct"
+  architecture:
+    torch_dtype: "bfloat16"
+    attn_implementation: "flash_attention_2"
+    gradient_checkpointing: true
+    rope_scaling: null

@@ -12,6 +12,7 @@ trainer:
 
 data:
   max_length: 128
+  max_samples: 0.1
   dataloader:
     batch_size: 2
     num_workers: 0

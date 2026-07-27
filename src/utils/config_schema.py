@@ -108,6 +108,7 @@ class DataConfig:
     dataset_name: str = "nlp_dataset"
     max_length: int = 2048
     val_split_size: float = 0.1
+    max_samples: Any = None
     seed: int = 42
     paths: Any = None
     force_reprocess: bool = False
@@ -248,6 +249,7 @@ class GenerationEvalConfig:
     generation_batch_size: int = 2
     generation_kwargs: dict[str, Any] = field(default_factory=dict)
     fixed_samples: list[dict[str, str]] = field(default_factory=list)
+    mode: str = "auto"
 
 
 @dataclass

@@ -3,7 +3,7 @@ defaults:
   - paths: default
   - logger: mlflow
   - environment: local
-  - data: sft                   # cpt | sft
+  - data: cpt                   # cpt | sft
   - model: default
   - trainer: default
   - api: fastapi

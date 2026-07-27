@@ -34,13 +34,18 @@ callbacks:
   model_freezing:
     _target_: src.training.callbacks.ModelFreezingCallback
     finetuning_type: ${model.finetuning_type}
-  
+
   generation_eval:
     _target_: src.training.callbacks.GenerationEvaluationCallback
     model_name: ${model.model_name}
     num_random: 5
     generation_batch_size: 2
     generation_kwargs: ${generation_kwargs}
+    # mode: auto — определяется по наличию prompt_column в data_cfg.
+    # Явно переопределяется в cpt.yaml / sft.yaml через trainer.callbacks.generation_eval.mode
+    mode: "auto"
+    # fixed_samples используются только в SFT-режиме.
+    # В CPT-режиме игнорируются автоматически.
     fixed_samples:
       - prompt: "Напиши SQL запрос для выборки пользователей старше 25 лет."
         target: "SELECT * FROM users WHERE age > 25;"

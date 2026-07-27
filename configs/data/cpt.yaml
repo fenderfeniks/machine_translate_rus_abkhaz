@@ -13,20 +13,21 @@ dataset_name: "cpt_dataset"
 max_length: 2048
 val_split_size: 0.1
 force_reprocess: false
-
+max_samples: null
 text_column: "text"
+# prompt_column и target_column намеренно отсутствуют:
+# их наличие/отсутствие используется коллбэком для auto-определения режима CPT vs SFT.
 
 preprocessing_num_workers: 4
 preprocessing_batch_size: 1000
 writer_batch_size: 200          # Частота сброса кэша на диск (защита от OOM)
 
 transforms:
-# 1. Сначала очищаем текст от мусора
+  # 1. Сначала очищаем текст от мусора
   - _target_: src.core.data.transforms.CleaningTransform
     num_proc: ${data.preprocessing_num_workers}
     batch_size: ${data.preprocessing_batch_size}
-    prompt_column: ${data.prompt_column}
-    target_column: ${data.target_column}
+    text_column: ${data.text_column}
     cleaners:
       - _target_: src.core.data.cleaners.RegexCleaner
         pattern: "\\s{3,}"
@@ -37,6 +38,7 @@ transforms:
       - _target_: src.core.data.cleaners.RegexCleaner
         pattern: "http[s]?://\\S+"
         replacement: ""
+
   - _target_: src.core.data.transforms.ValidationTransform
     num_proc: ${data.preprocessing_num_workers}
     text_column: ${data.text_column}

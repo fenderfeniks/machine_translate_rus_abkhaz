@@ -27,6 +27,10 @@ dependencies = [
     "dvc[gdrive]>=3.67.1",
     "pyopenssl>=26.2.0",
     "cryptography>=48.0.1",
+    "bitsandbytes>=0.46.1",
+    "absl-py>=2.5.0",
+    "nltk>=3.10.0",
+    "rouge-score>=0.1.2",
 ]
 
 [project.optional-dependencies]

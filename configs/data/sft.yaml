@@ -13,9 +13,10 @@ dataset_name: "sft_dataset"
 max_length: 256
 val_split_size: 0.1
 force_reprocess: false
-
-prompt_column: "prompt"
-target_column: "completion"
+max_samples: null
+prompt_column: "ru"
+target_column: "ab"
+# Наличие prompt_column используется коллбэком для auto-определения режима SFT.
 
 preprocessing_num_workers: 4
 preprocessing_batch_size: 1000
@@ -38,6 +39,7 @@ transforms:
       - _target_: src.core.data.cleaners.RegexCleaner
         pattern: "http[s]?://\\S+"
         replacement: ""
+
   - _target_: src.core.data.transforms.ValidationTransform
     num_proc: ${data.preprocessing_num_workers}
     batch_size: ${data.preprocessing_batch_size}

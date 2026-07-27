@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  model_name: "Qwen/Qwen3.5-9B"
+  mlflow_model_name: "Qwen3.5-9B"
+  architecture:
+    torch_dtype: "bfloat16"
+    attn_implementation: "flash_attention_2"
+    gradient_checkpointing: true
+    rope_scaling: null
