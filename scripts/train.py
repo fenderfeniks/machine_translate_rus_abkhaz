@@ -164,11 +164,6 @@ def train(cfg: DictConfig) -> None:
     register_safe_globals()
     try:
         trainer.fit(model=model_module, datamodule=datamodule, ckpt_path=resume_path)
-        print(type(trainer.logger))
-        print(dir(trainer.logger))
-        print(getattr(trainer.logger, "run_id", "НЕТ"))
-        print(getattr(trainer.logger, "_run_id", "НЕТ"))
-        print(getattr(trainer.logger, "experiment", "НЕТ"))
         logger.info("Обучение успешно завершено!")
     except KeyboardInterrupt:
         logger.warning("Обучение прервано (Ctrl+C)! Переход к сохранению артефактов...")

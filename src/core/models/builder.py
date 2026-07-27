@@ -124,7 +124,7 @@ class HFModelBuilder:
             "cache_dir": self.cache_dir,
             "quantization_config": bnb_config,
             "trust_remote_code": self.trust_remote_code,
-            "dtype": parsed_dtype,
+            "torch_dtype": parsed_dtype,
             "device_map": device_map,
             "attn_implementation": self.attn_implementation,
         }
