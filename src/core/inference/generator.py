@@ -7,7 +7,7 @@
 import logging
 from collections.abc import Iterator
 from threading import Thread
-from typing import Any, Union
+from typing import Any
 
 import torch
 from hydra.utils import instantiate
@@ -57,7 +57,7 @@ class HFTextGenerator:
 
     @torch.inference_mode()  # Отключаем градиенты для ускорения и экономии памяти
     # ИСПРАВЛЕНИЕ 2: Добавляем **kwargs, чтобы эндпоинты могли безопасно переопределять параметры (Race Condition fix)
-    def generate(self, texts: Union[str, list[str]], **kwargs: Any) -> list[str]:
+    def generate(self, texts: str | list[str], **kwargs: Any) -> list[str]:
         """Генерирует ответы для одного текста или батча текстов.
 
         Args:
@@ -110,7 +110,7 @@ class HFTextGenerator:
         # 5. Финальный постпроцессинг (строковая очистка в один проход)
         final_responses = [
             self.cleaner.clean(raw_text=raw_response, prompt=original_prompt)
-            for original_prompt, raw_response in zip(texts, decoded_texts)
+            for original_prompt, raw_response in zip(texts, decoded_texts)  # noqa
         ]
 
         return final_responses

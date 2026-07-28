@@ -8,6 +8,7 @@
 import logging
 import re
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +39,7 @@ class ResponseCleaner:
             remove_special_tokens: Удалять ли системные токены вроде <s>, </s>.
             remove_markdown_blocks: Удалять ли маркеры блоков кода Markdown.
             remove_extra_spaces: Схлопывать ли множественные пробелы в один.
-            trim_incomplete_sentence: Обрезать ли последнее предложение, если 
+            trim_incomplete_sentence: Обрезать ли последнее предложение, если
                 оно не завершено знаком препинания.
         """
         self.strip_prompt = strip_prompt
@@ -67,9 +68,7 @@ class ResponseCleaner:
             text = text[len(prompt) :]
 
         # 2. Llama-заголовки: <|start_header_id|>assistant<|end_header_id|>
-        text = re.sub(
-            r"<\|start_header_id\|>.*?<\|end_header_id\|>", "", text, flags=re.DOTALL
-        )
+        text = re.sub(r"<\|start_header_id\|>.*?<\|end_header_id\|>", "", text, flags=re.DOTALL)
 
         # 3. Прочие системные токены: <|eot_id|>, </s>, <s> и т.п.
         if self.remove_special_tokens:
