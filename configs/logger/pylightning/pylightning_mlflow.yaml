@@ -1,0 +1,9 @@
+# @package logger.pylightning
+_target_: pytorch_lightning.loggers.MLFlowLogger
+
+experiment_name: ${oc.env:MLFLOW_EXPERIMENT_NAME,"nlp_decoder_template"}
+tracking_uri: ${oc.env:MLFLOW_TRACKING_URI, "sqlite:///${paths.log_dir}/mlflow.db"}
+run_name: ${now:%Y-%m-%d_%H-%M-%S}
+log_model: false
+tags:
+  env: ${environment.name}

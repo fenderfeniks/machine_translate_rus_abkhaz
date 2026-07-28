@@ -45,12 +45,15 @@ async def generate_stream_endpoint(request: Request, body: GenerationRequest) ->
         async with semaphore:
             try:
                 stream_iter = generator.generate_stream(final_prompt)
-                while True:
-                    try:
-                        chunk = await asyncio.to_thread(next, stream_iter)
-                        yield chunk
-                    except StopIteration:
-                        break
+
+                # Убираем while True! async for сам переберет все чанки и завершится
+                async for chunk in stream_iter:
+                    yield chunk
+
+                # Опционально: раскомментируйте строку ниже,
+                # если ваш клиент строго требует явного флага окончания
+                # yield "[DONE]"
+
             except asyncio.CancelledError:
                 logger.warning("Клиент разорвал соединение при стриминге!")
                 raise

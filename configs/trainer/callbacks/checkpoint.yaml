@@ -1,0 +1,18 @@
+# @package trainer.callbacks.model_checkpoint
+_target_: pytorch_lightning.callbacks.ModelCheckpoint
+dirpath: ${paths.log_dir}/checkpoints
+monitor: "val_loss"
+mode: "min"
+save_top_k: 2
+save_last: true
+auto_insert_metric_name: false
+
+# Шаговое именование файлов согласовано с max_steps-режимом тренера.
+# epoch_{epoch} бессмысленен когда max_epochs=-1 и обучение считается в шагах.
+filename: "step={step}-val_loss={val_loss:.4f}"
+
+# Сохранять чекпоинт синхронно с валидацией (val_check_interval в default.yaml).
+# every_n_train_steps должен быть кратен val_check_interval, иначе checkpoint
+# будет сохранён без актуального val_loss в имени файла (Lightning подставит 0.0).
+every_n_train_steps: 200
+save_on_train_epoch_end: false

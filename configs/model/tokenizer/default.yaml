@@ -1,9 +1,7 @@
-# @package _global_
-model:
-  tokenizer:
-    _target_: src.core.models.tokenization.HFTokenizerBuilder
-    tokenizer_name: ${model.model_name}   # совпадает с HFTokenizerBuilder.__init__
-    use_fast: true
-    padding_side: "right"
-    add_eos_token: false
-    chat_template: null
+# @package model.tokenizer
+_target_: src.core.models.tokenization.HFTokenizerBuilder
+tokenizer_name: ${model.architecture.model_name_or_path}
+use_fast: true
+padding_side: "right"
+add_eos_token: false
+chat_template: null

@@ -1,10 +1,4 @@
-# @package _global_
-# configs/model/quantization/4bit.yaml
-
-model:
-  quantization:
-    _target_: transformers.BitsAndBytesConfig
-    load_in_4bit: true
-    bnb_4bit_compute_dtype: "bfloat16"
-    bnb_4bit_quant_type: "nf4"
-    bnb_4bit_use_double_quant: true
+load_in_4bit: true
+bnb_4bit_compute_dtype: "bfloat16"
+bnb_4bit_quant_type: "nf4"
+bnb_4bit_use_double_quant: true

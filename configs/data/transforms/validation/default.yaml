@@ -1,0 +1,7 @@
+_target_: src.core.data.transforms.validation.ValidationTransform
+text_column: ${data.text_column}
+prompt_column: ${data.prompt_column}
+target_column: ${data.target_column}
+num_proc: ${data.num_proc}
+batch_size: ${data.batch_size}
+pipeline: ${data.transforms.cleaning}

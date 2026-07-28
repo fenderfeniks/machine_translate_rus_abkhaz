@@ -1,0 +1,5 @@
+# @package data.collator
+_target_: src.core.data.collators.InstructionDataCollator
+max_sequence_length: 2048
+response_template: "### Ответ:"
+mask_prompt: true

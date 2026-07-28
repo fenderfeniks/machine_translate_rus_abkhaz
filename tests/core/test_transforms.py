@@ -15,7 +15,7 @@ def _make_hf_dataset(records: list[dict]) -> Dataset:
 
 class TestValidationTransform:
     def test_filters_empty_prompts(self):
-        from src.core.data.transforms import ValidationTransform
+        from src.core.data.transforms.validation import ValidationTransform
 
         ds = _make_hf_dataset(
             [
@@ -30,7 +30,7 @@ class TestValidationTransform:
         assert all(r["prompt"] for r in result)
 
     def test_filters_short_prompts(self):
-        from src.core.data.transforms import ValidationTransform
+        from src.core.data.transforms.validation import ValidationTransform
 
         ds = _make_hf_dataset(
             [
@@ -43,7 +43,7 @@ class TestValidationTransform:
         assert len(result) == 1
 
     def test_cpt_mode_validates_text_column(self):
-        from src.core.data.transforms import ValidationTransform
+        from src.core.data.transforms.validation import ValidationTransform
 
         ds = _make_hf_dataset(
             [
@@ -57,7 +57,7 @@ class TestValidationTransform:
         assert len(result) == 2
 
     def test_raises_without_required_columns(self):
-        from src.core.data.transforms import ValidationTransform
+        from src.core.data.transforms.validation import ValidationTransform
 
         ds = _make_hf_dataset([{"unknown_col": "data"}])
         transform = ValidationTransform(num_proc=1, batch_size=10)
@@ -67,7 +67,8 @@ class TestValidationTransform:
 
 class TestLengthFilterTransform:
     def test_removes_long_sequences(self, tiny_tokenizer):
-        from src.core.data.transforms import LengthFilterTransform, TokenizationTransform
+        from src.core.data.transforms.filtering import LengthFilterTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset(
             [
@@ -85,7 +86,7 @@ class TestLengthFilterTransform:
 
 class TestTokenizationTransform:
     def test_text_column_mode(self, tiny_tokenizer):
-        from src.core.data.transforms import TokenizationTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset([{"text": "Hello world"}, {"text": "Test input"}])
         transform = TokenizationTransform(
@@ -99,7 +100,7 @@ class TestTokenizationTransform:
         assert len(result) == 2
 
     def test_prompt_response_mode_adds_prompt_len(self, tiny_tokenizer):
-        from src.core.data.transforms import TokenizationTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset(
             [
@@ -117,7 +118,7 @@ class TestTokenizationTransform:
         assert result[0]["prompt_len"] > 0
 
     def test_removes_original_columns(self, tiny_tokenizer):
-        from src.core.data.transforms import TokenizationTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset([{"text": "Hello"}, {"text": "World"}])
         transform = TokenizationTransform(tokenizer=tiny_tokenizer, text_column="text", num_proc=1)
@@ -127,7 +128,8 @@ class TestTokenizationTransform:
 
 class TestSequencePackingTransform:
     def test_packing_creates_equal_length_chunks(self, tiny_tokenizer):
-        from src.core.data.transforms import SequencePackingTransform, TokenizationTransform
+        from src.core.data.transforms.packing import SequencePackingTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset([{"text": "word " * 20}] * 10)
         tok = TokenizationTransform(tokenizer=tiny_tokenizer, text_column="text", num_proc=1)
@@ -137,7 +139,8 @@ class TestSequencePackingTransform:
         assert all(len(r["input_ids"]) == 32 for r in result)
 
     def test_drop_remainder_true_drops_incomplete_chunk(self, tiny_tokenizer):
-        from src.core.data.transforms import SequencePackingTransform, TokenizationTransform
+        from src.core.data.transforms.packing import SequencePackingTransform
+        from src.core.data.transforms.tokenization import TokenizationTransform
 
         ds = _make_hf_dataset([{"text": "word " * 5}] * 3)
         tok = TokenizationTransform(tokenizer=tiny_tokenizer, text_column="text", num_proc=1)
@@ -155,7 +158,7 @@ class TestSequencePackingTransform:
 class TestCleaningTransform:
     def test_cleans_prompt_target_columns(self):
         from src.core.data.cleaners import RegexCleaner
-        from src.core.data.transforms import CleaningTransform
+        from src.core.data.transforms.validation import CleaningTransform
 
         ds = _make_hf_dataset(
             [
@@ -172,7 +175,7 @@ class TestCleaningTransform:
 
     def test_cleans_text_column(self):
         from src.core.data.cleaners import RegexCleaner
-        from src.core.data.transforms import CleaningTransform
+        from src.core.data.transforms.filtering import CleaningTransform
 
         ds = _make_hf_dataset([{"text": "Текст\\nс\\nпереносами"}])
         cleaners = [RegexCleaner(pattern="\\\\n", replacement=" ")]

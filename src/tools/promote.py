@@ -1,4 +1,4 @@
-# src/jobs/promote.py
+# src/tools/promote.py
 import logging
 import os
 import sys

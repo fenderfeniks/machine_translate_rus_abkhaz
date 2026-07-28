@@ -1,0 +1,19 @@
+# @package trainer
+# configs/trainer/strategy/ddp.yaml
+#
+# DDP (Distributed Data Parallel): каждый GPU держит полную копию модели,
+# градиенты усредняются через all-reduce после каждого backward.
+# Требование: VRAM на одном GPU >= размер модели целиком.
+#
+# Подключение:
+#   python train.py +trainer/strategy=ddp trainer.devices=4
+#
+# ВАЖНО: devices передаётся через CLI, а не хранится здесь.
+# Файл стратегии отвечает только за strategy — это его единственная ответственность.
+
+strategy:
+  _target_: pytorch_lightning.strategies.DDPStrategy
+  find_unused_parameters: false
+  # find_unused_parameters: true — нужен если часть параметров не участвует
+  # в forward (напр. frozen classification head при LoRA только на attention).
+  # По умолчанию false: быстрее и безопаснее для стандартных LLM-конфигов.

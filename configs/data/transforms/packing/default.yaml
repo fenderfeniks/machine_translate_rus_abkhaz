@@ -1,0 +1,6 @@
+_target_: src.core.data.transforms.packing.SequencePackingTransform
+packing_chunk_size: ${data.max_length}
+drop_remainder: ${data.drop_remainder}
+num_proc: ${data.num_proc}
+batch_size: ${data.batch_size}
+writer_batch_size: ${data.writer_batch_size}

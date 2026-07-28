@@ -1,0 +1,8 @@
+# @package trainer.callbacks.early_stopping
+_target_: pytorch_lightning.callbacks.EarlyStopping
+monitor: "val_loss"
+patience: 5                 # Остановить если val_loss не улучшился 5 val_check подряд
+mode: "min"
+min_delta: 0.001
+# При val_check_interval=200 и patience=5 → ждём 1000 шагов деградации
+# Отключить: закомментировать эту секцию или patience: 9999

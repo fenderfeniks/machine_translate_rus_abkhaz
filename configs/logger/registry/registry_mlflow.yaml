@@ -1,0 +1,5 @@
+# @package logger.registry
+model_name: ${model.architecture.mlflow_model_name}
+register_on_success: true
+artifact_path: "lora_weights"
+promote_to_staging: true

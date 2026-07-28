@@ -20,7 +20,8 @@ def _make_mock_generated_ids(batch_size: int = 1, total_len: int = 10):
 
 def _make_text_generator(generated_texts: list[str]):
     """Создаёт HFTextGenerator с замоканной моделью и токенизатором."""
-    from src.core.models.generator import HFTextGenerator
+    # ИСПРАВЛЕНИЕ: Добавлен префикс src.
+    from src.core.inference.generator import HFTextGenerator
 
     mock_tokenizer = MagicMock()
     mock_tokenizer.padding_side = "left"
@@ -46,7 +47,9 @@ def _make_text_generator(generated_texts: list[str]):
     generator.model = mock_model
     generator.tokenizer = mock_tokenizer
     generator.generation_kwargs = {"max_new_tokens": 50}
-    from src.core.models.response_cleaner import ResponseCleaner
+
+    # ИСПРАВЛЕНИЕ: Добавлен префикс src.
+    from src.core.inference.response_cleaner import ResponseCleaner
 
     generator.cleaner = ResponseCleaner(
         trim_incomplete_sentence=False,

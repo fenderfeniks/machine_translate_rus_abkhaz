@@ -113,13 +113,25 @@ class RawDataFetcher:
         if not self.file_name:
             raise ValueError("Для local источника необходимо указать file_name.")
             
-        file_path = self.raw_dir / self.file_name
-        if not file_path.exists():
-            raise FileNotFoundError(f"Локальный файл не найден: {file_path}")
+        matched_files = list(self.raw_dir.glob(self.file_name))
+        
+        if not matched_files:
+            raise FileNotFoundError(
+                f"Локальные файлы не найдены по пути или шаблону: {self.raw_dir / self.file_name}"
+            )
 
+        data_files = [str(p) for p in matched_files]
         loader, kwargs = _detect_loader(self.file_name, self.kwargs)
-        logger.info("Загрузка локального файла: %s (loader=%s)", file_path, loader)
-        return load_dataset(loader, data_files=str(file_path), **kwargs)
+        
+        if len(data_files) == 1:
+            logger.info("Загрузка локального файла: %s (loader=%s)", data_files[0], loader)
+        else:
+            logger.info(
+                "Загрузка %d локальных файлов по шаблону %s (loader=%s)", 
+                len(data_files), self.file_name, loader
+            )
+            
+        return load_dataset(loader, data_files=data_files, **kwargs)
 
     def _load_kaggle(self) -> Dataset | DatasetDict:
         if not self.file_name or not self.dataset_name:

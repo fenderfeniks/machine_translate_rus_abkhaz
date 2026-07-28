@@ -1,0 +1,10 @@
+_target_: src.core.data.transforms.tokenization.TokenizationTransform
+use_chat_template: ${data.use_chat_template}
+text_column: ${data.text_column}
+prompt_column: ${data.prompt_column}
+target_column: ${data.target_column}
+messages_column: ${data.messages_column}
+separator: ${data.separator}
+num_proc: ${data.num_proc}
+batch_size: ${data.batch_size}
+writer_batch_size: ${data.writer_batch_size}

@@ -1,0 +1,20 @@
+# @package inference
+_target_: src.core.models.generator.HFTextGenerator
+
+# Базовые параметры генерации
+generation_kwargs:
+  max_new_tokens: 512
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  repetition_penalty: 1.1
+
+# Конфиг вложенного объекта для очистки
+cleaner_cfg:
+  _target_: src.core.models.response_cleaner.ResponseCleaner
+  strip_prompt: true
+  remove_special_tokens: true
+  remove_markdown_blocks: false  # Обычно в чатах мы хотим оставлять код
+  remove_extra_spaces: true
+  trim_incomplete_sentence: true

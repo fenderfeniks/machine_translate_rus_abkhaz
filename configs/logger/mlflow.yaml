@@ -1,8 +1,0 @@
-_target_: pytorch_lightning.loggers.MLFlowLogger
-experiment_name: ${oc.env:MLFLOW_EXPERIMENT_NAME,"nlp_decoder_template"}
-# Если в окружении задан MLFLOW_TRACKING_URI — берем его. Если нет — падаем на локальный SQLite
-tracking_uri: ${oc.env:MLFLOW_TRACKING_URI, "sqlite:///${paths.log_dir}/mlflow.db"}
-run_name: ${now:%Y-%m-%d_%H-%M-%S}
-log_model: false
-tags:
-  env: ${environment.name}

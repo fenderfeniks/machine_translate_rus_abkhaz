@@ -1,0 +1,6 @@
+# @package system
+# configs/system/default.yaml
+# Системные ресурсы. Переопределяются через environment/*.yaml.
+num_proc: 4       # CPU для datasets.map — не больше числа физических ядер
+num_workers: 4    # DataLoader workers — 0 на Windows/отладке, 2-8 на Linux
+pin_memory: true  # true только при num_workers > 0, иначе нет смысла

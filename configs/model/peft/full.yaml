@@ -1,7 +1,0 @@
-# @package _global_
-# configs/model/peft/full.yaml
-# Full Fine-Tuning — все веса обучаются, адаптеры не используются.
-# Переключить: - peft: full в model/default.yaml
-model:
-  peft: null
-  finetuning_type: "full"

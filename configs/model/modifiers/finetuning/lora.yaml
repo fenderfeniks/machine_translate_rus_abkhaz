@@ -1,0 +1,19 @@
+# @package model.modifiers.finetuning
+_target_: src.core.models.modifiers.PEFTModifier
+gradient_checkpointing: true
+is_quantized: true
+lora_resume_path: null
+peft_config:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    #- "k_proj"
+    - "v_proj"
+    #- "o_proj"
+    #- "gate_proj"
+    #- "up_proj"
+    #- "down_proj"

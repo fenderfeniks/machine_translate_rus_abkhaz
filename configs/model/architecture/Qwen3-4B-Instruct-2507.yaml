@@ -1,9 +1,8 @@
-# @package _global_
-model:
-  model_name: "Qwen/Qwen3-4B-Instruct-2507"
-  mlflow_model_name: "Qwen3-4B-Instruct-2507"
-  architecture:
-    torch_dtype: "bfloat16"
-    attn_implementation: "sdpa"
-    gradient_checkpointing: true
-    rope_scaling: null
+# @package model.architecture
+model_name_or_path: "Qwen/Qwen3-4B-Instruct-2507"
+mlflow_model_name: "Qwen3-4B-Instruct-2507"
+auto_model_class: "transformers.AutoModelForCausalLM"
+torch_dtype: "bfloat16"
+attn_implementation: "sdpa"    # sdpa: Ampere не обязателен в отличие от fa2
+trust_remote_code: false
+rope_scaling: null

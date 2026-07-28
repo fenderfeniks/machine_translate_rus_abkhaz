@@ -21,9 +21,6 @@ from src.api.rest.dependencies import get_generator, get_prompt_manager
 from src.api.rest.server import create_app
 
 
-# ---------------------------------------------------------------------------
-# App fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(scope="function")
 def test_app():
     """Чистое приложение для каждого теста без загрузки ML-моделей."""
@@ -32,17 +29,15 @@ def test_app():
     return app
 
 
-# ---------------------------------------------------------------------------
-# ML mocks
-# ---------------------------------------------------------------------------
 @pytest.fixture
 def mock_generator() -> MagicMock:
-    """Мок пайплайна — имитирует LLMGenerationPipeline.__call__"""
+    """Мок пайплайна — имитирует src.sdk.inference.LLMGenerationPipeline.__call__"""
     generator = MagicMock(name="LLMGenerationPipeline")
+    # SDK возвращает список словарей
     generator.return_value = [
         {"prompt": "test prompt", "generated_text": "test generated response"}
     ]
-    # Мок для HFTextGenerator.generate() который используется внутри
+    # Внутренний генератор, который может вызываться напрямую в некоторых сценариях
     generator.generator = MagicMock()
     generator.generator.generate.return_value = ["test generated response"]
     return generator
@@ -76,9 +71,6 @@ async def async_client(test_app, override_ml_deps):
         yield client
 
 
-# ---------------------------------------------------------------------------
-# Shared model fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def tiny_tokenizer():
     """Минимальный реальный токенизатор для тестов коллатора и генерации."""

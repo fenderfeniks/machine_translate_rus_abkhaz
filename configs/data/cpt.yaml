@@ -1,70 +1,56 @@
-# configs/data/cpt.yaml
-# Сценарий 1: Continuous Pre-Training на чистом тексте.
-# Переключить: data: cpt в main.yaml
-
 defaults:
   - source: local
+  - splitter: default
+  - collator: cpt
+  - transforms/cleaning: default
+  - transforms/validation: default
+  - transforms/deduplication: minhash
+  - transforms/tokenization: default
+  - transforms/filtering: default
+  - transforms/packing: default  # Обязательный шаг для CPT
   - _self_
 
-paths: ${paths}
-seed: ${seed}
-
+# ==========================================
+# ГРУППА 1: БАЗОВЫЕ НАСТРОЙКИ
+# ==========================================
 dataset_name: "cpt_dataset"
-max_length: 512
-val_split_size: 0.1
+seed: ${seed}
+max_samples: null
 force_reprocess: false
-max_samples: 0.2
+
+val_size: 0.05
+test_size: 0.05
+
+# ==========================================
+# ГРУППА 2: ПАРАМЕТРЫ ТРАНСФОРМАЦИЙ
+# ==========================================
 text_column: "text"
-# prompt_column и target_column намеренно отсутствуют:
-# их наличие/отсутствие используется коллбэком для auto-определения режима CPT vs SFT.
+prompt_column: null
+target_column: null
 
-preprocessing_num_workers: 4
-preprocessing_batch_size: 1000
-writer_batch_size: 200          # Частота сброса кэша на диск (защита от OOM)
+max_length: ${max_length}
+num_proc: ${system.num_proc}
+batch_size: 1000
 
-transforms:
-  # 1. Сначала очищаем текст от мусора
-  - _target_: src.core.data.transforms.CleaningTransform
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    text_column: ${data.text_column}
-    cleaners:
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "\\s{3,}"
-        replacement: " "
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "<[^>]+>"
-        replacement: ""
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "http[s]?://\\S+"
-        replacement: ""
+cleaner:
+  _target_: src.core.data.cleaners.TextCleaningPipeline
+  cleaners: []
 
-  - _target_: src.core.data.transforms.ValidationTransform
-    num_proc: ${data.preprocessing_num_workers}
-    text_column: ${data.text_column}
-    batch_size: ${data.preprocessing_batch_size}
-
-  - _target_: src.core.data.transforms.TokenizationTransform
-    use_chat_template: false
-    text_column: ${data.text_column}
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    writer_batch_size: ${data.writer_batch_size}
-
-  - _target_: src.core.data.transforms.SequencePackingTransform
-    packing_chunk_size: ${data.max_length}
-    drop_remainder: true
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    writer_batch_size: ${data.writer_batch_size}
-
-# DataCollatorForLanguageModeling: labels = input_ids, сдвиг делает модель сама
-collator:
-  _target_: transformers.DataCollatorForLanguageModeling
-  mlm: false
+# ==========================================
+# ГРУППА 3: DATALOADER И ПУТИ
+# ==========================================
+paths:
+  processed_data_dir: "${paths.processed_data_dir}/cpt"
 
 dataloader:
-  _target_: torch.utils.data.DataLoader
-  batch_size: 8
-  num_workers: 0
-  pin_memory: false
+  batch_size: 4
+  num_workers: ${system.num_workers}
+  pin_memory: ${system.pin_memory}
+# ==========================================
+# ГРУППА 4: ПАРАМЕТРЫ ТРАНСФОРМАЦИЙ (токенизация, паковка)
+# ==========================================
+use_chat_template: false
+messages_column: null
+separator: "\n\n"
+writer_batch_size: 1000
+drop_remainder: false         # false = оставляем неполный последний чанк

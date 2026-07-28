@@ -1,9 +1,7 @@
-# @package _global_
-model:
-  model_name: "HuggingFaceM4/tiny-random-LlamaForCausalLM"
-  mlflow_model_name: "tiny-random-LlamaForCausalLM"
-  architecture:
-    torch_dtype: "bfloat16"
-    attn_implementation: "sdpa"
-    gradient_checkpointing: true
-    rope_scaling: null
+# @package model.architecture
+model_name_or_path: "HuggingFaceM4/tiny-random-LlamaForCausalLM"
+mlflow_model_name: "tiny-random-LlamaForCausalLM"
+auto_model_class: "transformers.AutoModelForCausalLM"
+torch_dtype: "bfloat16"
+attn_implementation: "sdpa"
+trust_remote_code: false

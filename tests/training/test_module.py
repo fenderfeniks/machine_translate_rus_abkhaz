@@ -223,3 +223,26 @@ class TestConfigureOptimizers:
             module.configure_optimizers()
 
         assert len(captured) == 0
+
+    def test_returns_optimizer_with_callable_cfg(self, fake_causal_model):
+        """Тестирует новую архитектуру с _partial_: true (callable config)."""
+        import torch
+
+        from src.training.module import CausalLMLightningModule
+
+        # Имитируем поведение Hydra с _partial_: true
+        def fake_partial_optimizer(params):
+            return torch.optim.AdamW(params, lr=1e-5)
+
+        module = CausalLMLightningModule(
+            model=fake_causal_model,
+            optimizer_cfg=fake_partial_optimizer,  # Передаем как функцию, а не конфиг
+            scheduler_cfg=None,
+        )
+
+        module.trainer = MagicMock()
+        result = module.configure_optimizers()
+
+        assert isinstance(result, torch.optim.Optimizer)
+        # Проверяем, что оптимизатор применил правильный lr
+        assert result.param_groups[0]["lr"] == 1e-5

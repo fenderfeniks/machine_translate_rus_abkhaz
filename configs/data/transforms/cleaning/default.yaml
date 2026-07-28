@@ -1,0 +1,8 @@
+# @package data.transforms.cleaning
+_target_: src.core.data.transforms.validation.CleaningTransform
+pipeline: ${data.cleaner}
+text_column: ${data.text_column}
+prompt_column: ${data.prompt_column}
+target_column: ${data.target_column}
+num_proc: ${data.num_proc}
+batch_size: ${data.batch_size}

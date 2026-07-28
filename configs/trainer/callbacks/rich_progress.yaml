@@ -1,0 +1,5 @@
+# @package trainer.callbacks.rich_progress_bar
+_target_: pytorch_lightning.callbacks.RichProgressBar
+# Выводит в терминал прогресс-бар с train_loss / val_loss / val_perplexity,
+# скоростью (it/s) и оценкой времени до конца.
+# Требует: pip install rich

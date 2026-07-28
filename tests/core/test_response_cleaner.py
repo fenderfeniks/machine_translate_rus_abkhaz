@@ -6,7 +6,8 @@
 
 import pytest
 
-from src.core.models.response_cleaner import ResponseCleaner
+# ИСПРАВЛЕНИЕ: Добавлен префикс src.
+from src.core.inference.response_cleaner import ResponseCleaner
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ class TestEchoPromptStripping:
 
 class TestSpecialTokenRemoval:
     def test_removes_llama_header_tags(self, cleaner):
-        text = "<|start_header_id|>assistant<|end_header_id|>\\nHello!"
+        text = "<|start_header_id|>assistant<|end_header_id|>\nHello!"
         result = cleaner.clean(raw_text=text)
         assert "<|start_header_id|>" not in result
         assert "<|end_header_id|>" not in result
@@ -64,7 +65,7 @@ class TestMarkdownCleaning:
 
     def test_markdown_disabled_keeps_backticks(self):
         cleaner = ResponseCleaner(remove_markdown_blocks=False)
-        text = "```python\\ncode\\n```"
+        text = "```python\ncode\n```"
         result = cleaner.clean(raw_text=text)
         assert "```" in result
 
@@ -108,7 +109,7 @@ class TestEdgeCases:
             "",
             "   ",
             "<s>token soup</s>",
-            "Multi.\\nLine\\nText.",
+            "Multi.\nLine\nText.",
         ],
     )
     def test_does_not_raise_on_various_inputs(self, cleaner, text):

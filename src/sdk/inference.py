@@ -1,5 +1,7 @@
 # src/sdk/inference.py
+import asyncio
 import logging
+import threading
 from pathlib import Path
 
 import torch
@@ -8,37 +10,22 @@ from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from src.core.models.generator import HFTextGenerator
+from src.core.inference.generator import HFTextGenerator
 from src.utils.checkpoint_utils import load_checkpoint
 from src.utils.logger import setup_logging
-from src.utils.mlflow_helpers import resolve_lora_resume_path
-from src.utils.quantization_utils import apply_inference_quantization
+from src.utils.mlflow import resolve_lora_resume_path
 
 
 setup_logging()
-
 logger = logging.getLogger(__name__)
 
 
 class LLMGenerationPipeline:
-    """SDK для инференса генеративных моделей.
-
-    Скрывает инициализацию Hydra, квантование и логику генерации,
-    предоставляя простой и готовый к использованию интерфейс
-    для вызова модели (например, из FastAPI).
-    """
-
     def __init__(
         self,
         config_name: str = "main",
         checkpoint_path: str | None = None,
     ) -> None:
-        """Инициализирует пайплайн инференса.
-
-        Args:
-            config_name: Имя главного конфигурационного файла Hydra (без .yaml).
-            checkpoint_path: Путь к локальным весам для ручной подгрузки (поверх базовой).
-        """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info("Инициализация LLMGenerationPipeline на устройстве: %s", self.device)
 
@@ -52,34 +39,29 @@ class LLMGenerationPipeline:
 
         self.tokenizer = instantiate(self.cfg.model.tokenizer).build()
 
-        # Защита от OOM: Форсированное квантование для API
-        self.cfg = apply_inference_quantization(self.cfg)
-
-        # Загрузка LoRA адаптера из MLflow Registry (если включено в конфиге)
-        resume_cfg = self.cfg.model.get("lora_resume", {})
+        resume_cfg = self.cfg.get("lora_resume", {})
         lora_resume_path = resolve_lora_resume_path(resume_cfg)
         if lora_resume_path:
             logger.info("LoRA адаптер будет загружен из: %s", lora_resume_path)
-        else:
-            logger.warning(
-                "lora_resume.enabled=false — инференс на базовой архитектуре без адаптера."
+            OmegaConf.update(
+                self.cfg,
+                "model.modifiers.finetuning.lora_resume_path",
+                lora_resume_path,
+                force_add=True,
             )
 
-        self.model = instantiate(
-            self.cfg.model.builder, tokenizer=self.tokenizer, lora_resume_path=lora_resume_path
-        ).build()
+        builder = instantiate(self.cfg.model.builder)
+        builder.modifiers_cfg = self.cfg.model.get("modifiers")
+        self.model = builder.build(tokenizer=self.tokenizer)
 
-        # Опциональная загрузка кастомного чекпоинта поверх (для отладки/экспериментов)
         if checkpoint_path:
             logger.info("Подгрузка кастомных весов из: %s", checkpoint_path)
             self.model = load_checkpoint(self.model, checkpoint_path, device=self.device)
 
-        # Перенос на устройство не нужен, если модель уже квантована (device_map="auto")
         if not getattr(self.model, "is_quantized", False):
             self.model.to(self.device)
 
         self.model.eval()
-
         self.generator = HFTextGenerator(
             model=self.model,
             tokenizer=self.tokenizer,
@@ -88,15 +70,6 @@ class LLMGenerationPipeline:
 
     @torch.no_grad()
     def __call__(self, texts: str | list[str]) -> list[dict[str, str]]:
-        """Запускает генерацию для переданных текстов.
-
-        Args:
-            texts: Строка промпта или список строк.
-
-        Returns:
-            Список словарей, каждый из которых содержит исходный промпт
-            и сгенерированный ответ.
-        """
         if isinstance(texts, str):
             texts = [texts]
 
@@ -106,3 +79,42 @@ class LLMGenerationPipeline:
             {"prompt": prompt, "generated_text": gen}
             for prompt, gen in zip(texts, generated_texts)  # noqa B905
         ]
+
+    @torch.no_grad()
+    async def generate_stream(self, text: str, **kwargs):
+        """Асинхронно отдает токены через безопасную очередь."""
+        sync_stream = self.generator.generate_stream(text, **kwargs)
+
+        # Очередь для связи фонового потока и асинхронного цикла
+        queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def producer():
+            """Эта функция будет работать в одном изолированном потоке."""
+            try:
+                for chunk in sync_stream:
+                    # Безопасно закидываем токен в асинхронный цикл
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+            except Exception as e:
+                # Если модель упала при генерации, передаем ошибку
+                loop.call_soon_threadsafe(queue.put_nowait, e)
+            finally:
+                # Отправляем маркер завершения (None)
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        # 1. Запускаем выделенный поток-производитель
+        threading.Thread(target=producer, daemon=True).start()
+
+        # 2. Асинхронно читаем токены из очереди и отдаем API
+        while True:
+            chunk = await queue.get()
+
+            # Проверяем маркер завершения
+            if chunk is None:
+                break
+
+            # Проверяем, не прилетела ли ошибка из потока
+            if isinstance(chunk, Exception):
+                raise chunk
+
+            yield chunk

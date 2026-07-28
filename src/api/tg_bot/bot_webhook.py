@@ -13,6 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
 
 from src.api.tg_bot.handlers.chat import router as chat_router
+from src.core.prompts.manager import PromptManager
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,9 @@ else:
 
 dp = Dispatcher(storage=storage)
 dp.include_router(chat_router)
+
+# Регистрируем prompt_manager в контексте диспетчера по умолчанию (можно переопределить из FastAPI)
+dp["prompt_manager"] = PromptManager()
 
 
 def get_webhook_bot(token: str) -> Bot:

@@ -1,9 +1,0 @@
-# @package _global_
-model:
-  model_name: "Qwen/Qwen3-4B"
-  mlflow_model_name: "Qwen3-4B"
-  architecture:
-    torch_dtype: "bfloat16"
-    attn_implementation: "sdpa"
-    gradient_checkpointing: true
-    rope_scaling: null

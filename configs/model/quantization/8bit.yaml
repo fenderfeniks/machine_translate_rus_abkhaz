@@ -1,6 +1,1 @@
-# @package _global_
-# configs/model/quantization/8bit.yaml
-model:
-  quantization:
-    _target_: transformers.BitsAndBytesConfig
-    load_in_8bit: true
+load_in_8bit: true

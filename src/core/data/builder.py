@@ -18,18 +18,12 @@ logger = logging.getLogger(__name__)
 class NLPDataModule(pl.LightningDataModule):
     """Универсальный DataModule для работы с NLP датасетами.
 
-    Делегирует получение сырых данных `fetcher'у`, а подготовку 
-    данных — пайплайну трансформаций. Обработанные данные 
-    кэшируются на диске по хэшу конфигурации.
+    Делегирует получение сырых данных fetcher'у, разбиение — сплиттеру,
+    а подготовку данных — пайплайну трансформаций. 
+    Обработанные данные кэшируются на диске по хэшу конфигурации.
     """
 
     def __init__(self, data_cfg: Any, tokenizer: PreTrainedTokenizerBase) -> None:
-        """Инициализирует DataModule.
-
-        Args:
-            data_cfg: Конфигурация данных (DictConfig из Hydra).
-            tokenizer: Токенизатор для применения в трансформациях и коллаторе.
-        """
         super().__init__()
         self.data_cfg = data_cfg
         self.tokenizer = tokenizer
@@ -37,9 +31,10 @@ class NLPDataModule(pl.LightningDataModule):
         # Хэшируем конфигурацию данных для DVC/кэширования
         hash_dict = {
             "source": OmegaConf.to_container(self.data_cfg.source, resolve=True),
-            "transforms": OmegaConf.to_container(
-                self.data_cfg.transforms, resolve=True
-            ),
+            "splitter": OmegaConf.to_container(self.data_cfg.splitter, resolve=True),
+            # transforms — DictConfig с именованными ключами (validation, deduplication, ...),
+            # порядок определяется defaults в sft/cpt.yaml
+            "transforms": OmegaConf.to_container(self.data_cfg.transforms, resolve=True),
             "seed": self.data_cfg.get("seed"),
             "tokenizer_name": getattr(tokenizer, "name_or_path", "custom_tokenizer"),
         }
@@ -48,67 +43,41 @@ class NLPDataModule(pl.LightningDataModule):
         config_hash = hashlib.md5(hash_str.encode("utf-8")).hexdigest()[:8]
 
         dataset_name = self.data_cfg.get("dataset_name", "nlp_dataset")
-
         self.processed_dir = Path(self.data_cfg.paths.processed_data_dir) / f"{dataset_name}_processed_{config_hash}"
 
     def _maybe_subsample(self, dataset: Any, name: str) -> Any:
-        """Обрезает датасет до max_samples если задано в конфиге.
-
-        Args:
-            dataset: Исходный датасет.
-            name: Название сплита для логирования (train/validation/test).
-
-        Returns:
-            Обрезанный или исходный датасет.
-        """
         max_samples = self.data_cfg.get("max_samples", None)
         if max_samples is None:
             return dataset
 
         n = len(dataset)
-        if isinstance(max_samples, float):
-            k = max(1, int(n * max_samples))
-        else:
-            k = min(int(max_samples), n)
+        k = max(1, int(n * max_samples)) if isinstance(max_samples, float) else min(int(max_samples), n)
 
         logger.info("max_samples: %s %d → %d примеров (%s)", name, n, k, max_samples)
         return dataset.select(range(k))
 
     def prepare_data(self) -> None:
-        """Подготавливает данные: скачивает, трансформирует и кэширует на диск."""
         if self.processed_dir.exists() and not self.data_cfg.get("force_reprocess", False):
-            logger.info(
-                "Нашли кэш обработанных данных: %s. Подготовка пропущена.", 
-                self.processed_dir
-            )
+            logger.info("Нашли кэш обработанных данных: %s. Подготовка пропущена.", self.processed_dir)
             return
 
         logger.info("Начинаем загрузку и применение трансформаций...")
 
-        # Инстанцируем класс загрузчика
+        # 1. Загрузка данных
         fetcher = instantiate(self.data_cfg.source)
-        # Явно вызываем метод загрузки данных
         raw_datasets = fetcher.load()
 
-        if "validation" in raw_datasets and "test" in raw_datasets:
-            raw_train = raw_datasets["train"]
-            raw_val = raw_datasets["validation"]
-            raw_test = raw_datasets["test"]
-        else:
-            split_ds = raw_datasets["train"].train_test_split(
-                test_size=self.data_cfg.val_split_size * 2,
-                seed=self.data_cfg.seed,
-            )
-            raw_train = split_ds["train"]
-            val_test_split = split_ds["test"].train_test_split(
-                test_size=0.5, seed=self.data_cfg.seed
-            )
-            raw_val = val_test_split["train"]
-            raw_test = val_test_split["test"]
+        # 2. Разбиение датасета (логика вынесена в сплиттер)
+        splitter = instantiate(self.data_cfg.splitter)
+        split_datasets = splitter(raw_datasets)
 
-        # Инициализация трансформаций. Токенизатору прокидываем объект tokenizer
+        # 3. Инициализация трансформаций
+        # data.transforms — DictConfig: {validation: {...}, deduplication: {...}, ...}
+        # Порядок применения = порядок defaults в sft.yaml / cpt.yaml (Hydra его сохраняет).
+        # TokenizationTransform требует tokenizer как runtime-аргумент — пробрасываем отдельно.
+
         transforms = []
-        for transform_cfg in self.data_cfg.transforms:
+        for transform_cfg in self.data_cfg.transforms.values():
             if "TokenizationTransform" in transform_cfg.get("_target_", ""):
                 transforms.append(instantiate(transform_cfg, tokenizer=self.tokenizer))
             else:
@@ -119,19 +88,17 @@ class NLPDataModule(pl.LightningDataModule):
                 dataset_split = transform(dataset_split)
             return dataset_split
 
-        processed_dataset = DatasetDict(
-            {
-                "train": _apply_transforms(self._maybe_subsample(raw_train, "train")),
-                "validation": _apply_transforms(self._maybe_subsample(raw_val, "validation")),
-                "test": _apply_transforms(self._maybe_subsample(raw_test, "test")),
-            }
-        )
+        # 4. Применение пайплайна
+        processed_dataset = DatasetDict({
+            "train": _apply_transforms(self._maybe_subsample(split_datasets["train"], "train")),
+            "validation": _apply_transforms(self._maybe_subsample(split_datasets["validation"], "validation")),
+            "test": _apply_transforms(self._maybe_subsample(split_datasets["test"], "test")),
+        })
 
         processed_dataset.save_to_disk(str(self.processed_dir))
         logger.info("Данные успешно обработаны и сохранены в %s", self.processed_dir)
 
     def setup(self, stage: Optional[str] = None) -> None:
-        """Загружает закэшированные данные для нужной стадии."""
         processed_dataset = load_from_disk(str(self.processed_dir))
 
         if stage == "fit" or stage is None:
@@ -147,18 +114,7 @@ class NLPDataModule(pl.LightningDataModule):
         self.collator = instantiate(self.data_cfg.collator, tokenizer=self.tokenizer)
 
     def _dataloader_kwargs(self) -> dict:
-        """Извлекает параметры DataLoader из конфига, исключая служебные ключи Hydra.
-
-        instantiate() ненадёжен для DataLoader с callable collate_fn —
-        Hydra пытается резолвить любой dict-like объект, включая коллатор,
-        что приводит к TypeError: 'DictConfig' object is not callable.
-        Поэтому DataLoader создаётся напрямую, а параметры извлекаются вручную.
-
-        Returns:
-            Словарь kwargs для передачи в DataLoader (без _target_ и управляемых ключей).
-        """
         dl_cfg = OmegaConf.to_container(self.data_cfg.dataloader, resolve=True)
-        # Убираем ключи которые передаём явно или которые не нужны DataLoader
         for key in ("_target_", "dataset", "collate_fn", "shuffle"):
             dl_cfg.pop(key, None)
         return dl_cfg

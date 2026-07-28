@@ -1,0 +1,5 @@
+# @package data.collator
+_target_: src.core.data.collators.InstructionDataCollator
+max_sequence_length: 4096
+response_template: null
+mask_prompt: false

@@ -1,5 +1,5 @@
 # configs/data/source/hf.yaml
-_target_: src.core.data.fetcher.RawDataFetcher
+#_target_: src.core.data.fetcher.RawDataFetcher
 source_type: "hf"
 raw_dir: "${paths.data_dir}/raw"
 dataset_name: "HuggingFaceH4/testing_alpaca_small"

@@ -1,0 +1,4 @@
+_target_: src.core.data.splitters.RandomDatasetSplitter
+val_size: ${data.val_size}
+test_size: ${data.test_size}
+seed: ${data.seed}

@@ -1,23 +1,23 @@
 # @package _global_
+# configs/environment/prod.yaml
+# Продакшен: полный датасет, GPU, bf16, без ограничений батчей.
+# Применяется первым в defaults → перекрывает значения из остальных конфигов.
+
 environment:
   name: "prod"
 
 trainer:
-  max_epochs: 5
-  accelerator: gpu
+  accelerator: "gpu"
   precision: "bf16-mixed"
   limit_train_batches: 1.0
   limit_val_batches: 1.0
-  limit_test_batches: 1.0
+
+system:
+  num_proc: 8
+  num_workers: 4
+  pin_memory: true
 
 data:
-  max_length: 2048
+  max_samples: null
   dataloader:
-    batch_size: 8
-    num_workers: 4
-
-model:
-  compile: false
-
-api:
-  log_level: INFO
+    batch_size: 2         # micro batch; effective = batch_size × accumulate_grad_batches

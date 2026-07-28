@@ -1,38 +1,53 @@
 # src/core/data/schemas.py
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RawDatasetRecord(BaseModel):
     """Контракт для сырой записи датасета перед токенизацией.
 
-    Используется при подготовке обучающей выборки для строгой 
-    типизации и валидации входящих данных.
+    Поддерживает как CPT (Continual Pre-Training) через поле text, 
+    так и SFT (Supervised Fine-Tuning) через поля prompt и target.
     """
 
-    prompt: str = Field(..., description="Входной промпт для модели")
+    text: str | None = Field(
+        default=None, description="Сырой текст документа (для CPT)"
+    )
+    prompt: str | None = Field(
+        default=None, description="Входной промпт для модели (для SFT)"
+    )
     target: str | None = Field(
-        default=None, description="Ожидаемый ответ (для Fine-Tuning)"
+        default=None, description="Ожидаемый ответ (для SFT)"
     )
 
-    @field_validator("prompt")
+    @model_validator(mode="after")
+    def validate_task_fields(self) -> "RawDatasetRecord":
+        """Проверяет, что заполнены нужные поля для конкретной задачи."""
+        if self.text is None and self.prompt is None:
+            raise ValueError(
+                "Должен быть заполнен либо 'text' (для CPT), либо 'prompt' (для SFT)"
+            )
+        return self
+
+    @field_validator("text", "prompt")
     @classmethod
-    def validate_prompt_length(cls, v: str) -> str:
-        """Проверяет промпт на пустоту и минимальную длину.
+    def validate_content_length(cls, v: str | None) -> str | None:
+        """Проверяет текстовые поля на пустоту и минимальную длину.
 
         Args:
-            v: Входная строка промпта.
+            v: Входная строка.
 
         Returns:
-            Очищенная от пробелов по краям строка.
+            Очищенная от пробелов по краям строка или None.
 
         Raises:
-            ValueError: Если промпт пустой или короче 3 символов.
+            ValueError: Если текст состоит только из пробелов или короче 3 символов.
         """
-        v = v.strip()
-        if not v:
-            raise ValueError("Промпт не может быть пустым")
-        if len(v) < 3:
-            raise ValueError("Промпт слишком короткий (минимум 3 символа)")
+        if v is not None:
+            v = v.strip()
+            if not v:
+                raise ValueError("Поле ввода не может быть пустым")
+            if len(v) < 3:
+                raise ValueError("Текст слишком короткий (минимум 3 символа)")
         return v
 
     @field_validator("target")

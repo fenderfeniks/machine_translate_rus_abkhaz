@@ -1,70 +1,43 @@
 # configs/main.yaml
+# Корневой конфиг. Запуск: python train.py
+# Оверрайды через CLI: python train.py model/architecture=Qwen2.5-1.5B data=sft environment=local
+
 defaults:
+  # ── Инфраструктура ───────────────────────────────────────────────────────
   - paths: default
-  - logger: mlflow
-  - environment: local
-  - data: cpt                   # cpt | sft
+  - system: default                 # num_proc, num_workers, pin_memory
+  - logger/pylightning: pylightning_mlflow
+  - logger/registry: registry_mlflow
+
+  # ── Данные ───────────────────────────────────────────────────────────────
+  - data: cpt                       # sft | cpt
+  # ── Модель ───────────────────────────────────────────────────────────────
   - model: default
+
+  # ── Обучение ─────────────────────────────────────────────────────────────
+  - optimizer: adamw
+  - scheduler: cosine_warmup
   - trainer: default
-  - api: fastapi
+
+  # ── Инференс ─────────────────────────────────────────────────────────────
+  - inference: default
+
+  # ── Прочее ───────────────────────────────────────────────────────────────
   - prompts: default
   - strings: default
+  # ── API ──────────────────────────────────────────────────────────────────
+  - api: fastapi
+  # ── Окружение (последним! перекрывает всё ниже) ─────────────────────────────
+  - environment: local               # local | prod
   - _self_
 
+# ── Глобальные параметры ─────────────────────────────────────────────────────
+# Единственное место где они объявлены. Все конфиги ссылаются через ${seed}, ${max_length}.
 seed: 42
-project_name: "industrial_nlp_template"
-resume_training: false
-text: "Вставь одиночный запрос сюда для теста scripts/infer.py"
-# LightningModule
-model_module:
-  _target_: src.training.module.CausalLMLightningModule
-  optimizer_cfg:
-    _target_: torch.optim.AdamW
-    _partial_: true
-    lr: 2.0e-4
-    weight_decay: 0.01
-  scheduler_cfg:
-    _target_: transformers.get_cosine_schedule_with_warmup
-    _partial_: true
-    num_warmup_steps: 100
+max_length: 2048          # Максимальная длина последовательности — тянется в data и model
 
-# DataModule — source читается из data.source, не отсюда
-datamodule:
-  _target_: src.core.data.builder.NLPDataModule
-  _recursive_: false
-  data_cfg: ${data}
-
-# Параметры генерации — используются в train/callbacks и infer.py
-generation_kwargs:
-  max_new_tokens: 256
-  do_sample: true
-  temperature: 0.7
-  top_p: 0.9
-  top_k: 50
-  repetition_penalty: 1.15
-  no_repeat_ngram_size: 3
-
-# Параметры инференса (infer.py)
-inference:
-  quantization:
-    enabled: false
-    bits: 4
-  # generation_kwargs для инференса — по умолчанию берём глобальные
-  generation_kwargs: ${generation_kwargs}
-  # Батч-инференс: путь к входному jsonl файлу (null = одиночный запрос)
-  input_file: null
-  output_file: "predictions.jsonl"
-
-# Параметры оценки (eval.py)
-# ckpt_path передаётся через CLI: python eval.py ckpt_path=/path/to/weights
-ckpt_path: null
-metrics_output_path: "metrics.json"
-drift_threshold: null           # null = проверка дрифта отключена
-drift_metric_key: "test_perplexity"
-
-# Hydra — рабочая директория и логи
-hydra:
-  run:
-    dir: ${paths.log_dir}/${project_name}/runs/${now:%Y-%m-%d}_${now:%H-%M-%S}
-  job:
-    chdir: true
+# ── Системные ресурсы (переопределяются в environment) ───────────────────────
+system:
+  num_proc: 4             # CPU-процессы для обработки датасета (datasets.map)
+  num_workers: 4          # DataLoader workers
+  pin_memory: true        # Ускоряет CPU→GPU трансфер при num_workers > 0

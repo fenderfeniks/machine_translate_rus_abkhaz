@@ -1,0 +1,21 @@
+# @package data.source
+#_target_: src.core.data.mixers.InterleavedDataFetcher
+seed: ${seed}
+stopping_strategy: "first_exhausted"
+probabilities:
+  - 0.7
+  - 0.3
+fetchers:
+  # Первый источник (например, общий текст с HF)
+  - _target_: src.core.data.fetcher.RawDataFetcher
+    source_type: "hf"
+    raw_dir: "${paths.data_dir}/raw/general"
+    dataset_name: "HuggingFaceH4/testing_alpaca_small"
+    token: null
+    
+  # Второй источник (например, математика из локальной папки)
+  - _target_: src.core.data.fetcher.RawDataFetcher
+    source_type: "local"
+    raw_dir: "${paths.data_dir}/raw/math"
+    file_name: "math_*.parquet"
+    token: null

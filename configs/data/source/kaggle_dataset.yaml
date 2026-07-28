@@ -1,5 +1,5 @@
 # configs/data/source/kaggle.yaml
-_target_: src.core.data.fetcher.RawDataFetcher
+#_target_: src.core.data.fetcher.RawDataFetcher
 source_type: "kaggle"
 raw_dir: "${paths.data_dir}/raw"
 dataset_name: "username/dataset-name"

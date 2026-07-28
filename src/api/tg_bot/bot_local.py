@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from omegaconf import DictConfig, OmegaConf
 
 from src.api.tg_bot.handlers.chat import router as chat_router
+from src.core.prompts.manager import PromptManager
 
 
 load_dotenv()
@@ -39,15 +40,21 @@ def main(cfg: DictConfig) -> None:
 
     api_url = f"{cfg.api.domain}/api/v1/generate"
 
+    # Инициализируем PromptManager (если он собирается через Hydra или напрямую)
+    # Если в конфиге есть секция prompts, инстанцируем её, иначе создаем дефолтный
+    prompt_manager = PromptManager(cfg.get("prompts", {}))
+
     async def start_polling() -> None:
         logger.info("Удаление старых вебхуков...")
         await bot.delete_webhook(drop_pending_updates=True)
 
         logger.info("Запуск локального бота в режиме Polling...")
-        # Передаем данные через workflow_data диспетчера
+        # Передаем зависимости в контекст диспетчера aiogram 3
         dp["cfg"] = cfg
         dp["api_url"] = api_url
-        await dp.start_polling(bot)
+        dp["prompt_manager"] = prompt_manager
+
+        await dp.start_polling(bot, dp=dp)
 
     asyncio.run(start_polling())
 

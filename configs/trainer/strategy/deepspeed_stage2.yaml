@@ -1,0 +1,20 @@
+# @package trainer
+# configs/trainer/strategy/deepspeed_stage2.yaml
+#
+# DeepSpeed ZeRO Stage 2: шардирует состояние оптимизатора и градиенты между GPU.
+# Stage 2 экономит ~50% VRAM относительно DDP — за счёт шардинга Adam-моментов.
+# Нужен когда модель >= 7B и optimizer state не помещается в VRAM при DDP.
+#
+# Подключение:
+#   python train.py +trainer/strategy=deepspeed_stage2 trainer.devices=2
+#
+# Требует: pip install deepspeed
+
+strategy:
+  _target_: pytorch_lightning.strategies.DeepSpeedStrategy
+  stage: 2
+  offload_optimizer: false
+  # offload_optimizer: true — выгружает Adam-состояние на CPU RAM.
+  # Позволяет учить модели >= 13B на потребительском железе, но даёт ~30% замедление.
+  allgather_bucket_size: 2e8
+  reduce_bucket_size: 2e8

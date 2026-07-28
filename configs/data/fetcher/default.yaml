@@ -1,0 +1,6 @@
+_target_: src.core.data.fetcher.RawDataFetcher
+source_type: ${data.source_type}
+raw_dir: ${data.raw_dir}
+dataset_name: ${data.dataset_name}
+file_name: ${data.file_name}
+token: ${data.token}

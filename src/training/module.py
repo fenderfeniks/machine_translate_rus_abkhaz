@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class CausalLMLightningModule(pl.LightningModule):
     """Чистый LightningModule для обучения Causal LM.
 
-    Освобожден от логики заморозки и генерации (делегировано Callbacks).
-    Поддерживает сохранение и загрузку только LoRA весов для экономии места.
+    Поддерживает динамическое сохранение: для LoRA сохраняет только адаптеры,
+    для Full Fine-Tuning сохраняет все обучаемые веса.
     """
 
     def __init__(
@@ -23,13 +23,6 @@ class CausalLMLightningModule(pl.LightningModule):
         optimizer_cfg: Any,
         scheduler_cfg: Any | None = None,
     ) -> None:
-        """Инициализирует модуль Lightning.
-
-        Args:
-            model: Базовая архитектура модели PyTorch.
-            optimizer_cfg: Конфигурация оптимизатора (Hydra).
-            scheduler_cfg: Конфигурация планировщика (Hydra).
-        """
         super().__init__()
         self.model = model
         self.optimizer_cfg = optimizer_cfg
@@ -38,31 +31,23 @@ class CausalLMLightningModule(pl.LightningModule):
         self.save_hyperparameters(ignore=["model"])
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Модифицирует чекпоинт перед сохранением.
+        """Модифицирует чекпоинт перед сохранением на диск.
 
-        Оставляет только веса, относящиеся к LoRA, чтобы не сохранять
-        тяжелую квантованную базу.
+        Если используется PEFT, оставляет в чекпоинте только веса адаптера
+        для экономии дискового пространства.
         """
-        lora_state_dict = {
-            k: v
-            for k, v in checkpoint["state_dict"].items()
-            if "lora_" in k or "modules_to_save" in k
-        }
-        checkpoint["state_dict"] = lora_state_dict
+        from peft import PeftModel
+        from peft.utils import get_peft_model_state_dict
 
-    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Модифицирует состояние при загрузке из чекпоинта."""
-        # При загрузке игнорируем несовпадение ключей
-        self.load_state_dict(checkpoint["state_dict"], strict=False)
-        checkpoint["state_dict"] = self.state_dict()
-
-    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True) -> Any:
-        """Переопределяет метод загрузки состояния для фильтрации весов."""
-        # Фильтруем только LoRA веса при загрузке
-        lora_state_dict = {
-            k: v for k, v in state_dict.items() if "lora_" in k or "modules_to_save" in k
-        }
-        return super().load_state_dict(lora_state_dict, strict=False)
+        if isinstance(self.model, PeftModel):
+            # Встроенная и самая безопасная функция PEFT для фильтрации
+            # state_dict, которая учитывает как lora_A/B, так и modules_to_save
+            checkpoint["state_dict"] = get_peft_model_state_dict(
+                self.model, state_dict=checkpoint["state_dict"]
+            )
+        else:
+            # Full Fine-Tuning — оставляем чекпоинт как есть
+            pass
 
     def forward(
         self,
@@ -71,44 +56,42 @@ class CausalLMLightningModule(pl.LightningModule):
         labels: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Прямой проход модели."""
         return self.model(
             input_ids=input_ids, attention_mask=attention_mask, labels=labels, **kwargs
         )
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Один шаг обучения."""
         outputs = self(**batch)
         loss = outputs.loss
 
         if loss is None:
             raise ValueError("Модель не вернула loss. Проверь передачу labels из коллатора.")
 
+        # Фундаментальный guard: NaN/Inf в loss убивает обучение без диагноза.
+        # При BF16 + длинных последовательностях это случается на редких батчах
+        # с экстремально высокой энтропией. Пропускаем батч вместо краша.
+        if not torch.isfinite(loss):
+            logger.warning(
+                "batch_idx=%d: loss=%s — пропускаем батч (возврат None).", batch_idx, loss.item()
+            )
+            return None  # Lightning корректно обрабатывает None из training_step
+
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
-        """Один шаг валидации с подсчетом Perplexity."""
         outputs = self(**batch)
         loss = outputs.loss
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
-        # Расчет Perplexity
         try:
             perplexity = torch.exp(loss)
             self.log("val_perplexity", perplexity, on_epoch=True, prog_bar=True, logger=True)
         except OverflowError:
-            self.log(
-                "val_perplexity",
-                float("inf"),
-                on_epoch=True,
-                prog_bar=True,
-                logger=True,
-            )
+            self.log("val_perplexity", float("inf"), on_epoch=True, prog_bar=True, logger=True)
 
     def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
-        """Один шаг тестирования с подсчетом Perplexity."""
         outputs = self(**batch)
         loss = outputs.loss
 
@@ -118,22 +101,14 @@ class CausalLMLightningModule(pl.LightningModule):
             perplexity = torch.exp(loss)
             self.log("test_perplexity", perplexity, on_epoch=True, prog_bar=True, logger=True)
         except OverflowError:
-            self.log(
-                "test_perplexity",
-                float("inf"),
-                on_epoch=True,
-                prog_bar=True,
-                logger=True,
-            )
+            self.log("test_perplexity", float("inf"), on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self) -> dict[str, Any] | torch.optim.Optimizer:
-        """Настраивает оптимизаторы и планировщики шагов обучения."""
-        # КРИТИЧНО: Заморозка происходит ДО вызова этой функции через Callback.
-        # Поэтому здесь мы собираем только те параметры, которые остались размороженными.
+        # Собираем только те параметры, которые разморозил ModelBuilder/Modifiers
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
 
         if not trainable_params:
-            logger.warning("Нет параметров для обучения! Проверь настройки заморозки в Callback.")
+            logger.warning("Нет параметров для обучения! Проверь конфигурацию модификаторов.")
 
         if callable(self.optimizer_cfg):
             optimizer = self.optimizer_cfg(trainable_params)
@@ -144,8 +119,16 @@ class CausalLMLightningModule(pl.LightningModule):
             return optimizer
 
         if callable(self.scheduler_cfg):
-            # Вычисляем num_training_steps динамически
+            # estimated_stepping_batches корректно работает только когда тренер
+            # уже знает max_steps или max_epochs + dataloader size.
+            # При переходе на max_steps-режим это значение надёжно только после
+            # trainer.fit() → используем его напрямую как num_training_steps.
             total_steps = self.trainer.estimated_stepping_batches
+            if total_steps == float("inf"):
+                raise ValueError(
+                    "estimated_stepping_batches=inf: задайте max_steps в конфиге тренера. "
+                    "Обучение по эпохам без ограничения шагов несовместимо с LR-scheduler."
+                )
             scheduler = self.scheduler_cfg(optimizer=optimizer, num_training_steps=total_steps)
         else:
             scheduler = instantiate(self.scheduler_cfg, optimizer=optimizer)

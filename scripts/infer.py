@@ -8,16 +8,16 @@ from pathlib import Path
 import hydra
 import torch
 from dotenv import load_dotenv
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 load_dotenv()
 
-from src.core.models.generator import HFTextGenerator  # noqa E402
-from src.utils.hydra_utils import setup_config  # noqa E402
-from src.utils.logger import setup_logging  # noqa E402
-from src.utils.mlflow_helpers import resolve_lora_resume_path  # noqa E402
-from src.utils.quantization_utils import apply_inference_quantization  # noqa E402
+from src.core.inference.generator import HFTextGenerator  # noqa
+from src.utils.checkpoint_utils import load_checkpoint  # noqa
+from src.utils.hydra_utils import setup_config  # noqa
+from src.utils.logger import setup_logging  # noqa
+from src.utils.mlflow import resolve_lora_resume_path  # noqa
 
 
 setup_logging()
@@ -26,41 +26,34 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(config_path="../configs", config_name="main", version_base="1.3")
 def infer(cfg: DictConfig) -> None:
-    """Скрипт для тестирования генерации (одиночной или пакетной).
-
-    Выполняет инициализацию пайплайна с квантованием, генерирует
-    ответы на основе конфига и выводит подробную телеметрию производительности.
-
-    Args:
-        cfg: Конфигурация Hydra (DictConfig).
-    """
     cfg = setup_config(cfg)
 
     logger.info("Загрузка токенизатора...")
     tokenizer = hydra.utils.instantiate(cfg.model.tokenizer).build()
 
-    # === 1. ДИНАМИЧЕСКОЕ КВАНТОВАНИЕ (Защита от OOM) ===
-    cfg = apply_inference_quantization(cfg)
-
-    # Загрузка LoRA адаптера из MLflow Registry (если включено в конфиге)
-    resume_cfg = cfg.model.get("lora_resume", {})
+    # === 1. ЗАГРУЗКА АДАПТЕРОВ (если нужно) ===
+    # Квантование теперь применяется автоматически через cfg.model.quantization!
+    resume_cfg = cfg.get("lora_resume", {})
     lora_resume_path = resolve_lora_resume_path(resume_cfg)
+
     if lora_resume_path:
         logger.info("LoRA адаптер будет загружен из: %s", lora_resume_path)
+        # Динамически прокидываем путь в модификатор перед сборкой
+        OmegaConf.update(
+            cfg, "model.modifiers.finetuning.lora_resume_path", lora_resume_path, force_add=True
+        )
     else:
-        logger.warning("lora_resume.enabled=false — инференс на базовой архитектуре без адаптера.")
+        logger.warning("lora_resume не задан — инференс на базовой архитектуре.")
 
     logger.info("Загрузка модели...")
-    model = hydra.utils.instantiate(
-        cfg.model.builder, tokenizer=tokenizer, lora_resume_path=lora_resume_path
-    ).build()
+    builder = hydra.utils.instantiate(cfg.model.builder)
+    builder.modifiers_cfg = cfg.model.get("modifiers")
+    model = builder.build(tokenizer=tokenizer)
 
-    # Опциональная загрузка кастомного чекпоинта поверх (для отладки/экспериментов)
+    # Опциональная загрузка кастомного чекпоинта поверх
     ckpt_path = cfg.get("ckpt_path")
     if ckpt_path:
         logger.info("Подгрузка кастомных весов из: %s", ckpt_path)
-        from src.utils.checkpoint_utils import load_checkpoint
-
         model = load_checkpoint(model, ckpt_path, device="cpu")
 
     generator = HFTextGenerator(
@@ -76,7 +69,7 @@ def infer(cfg: DictConfig) -> None:
     input_file = cfg.get("inference", {}).get("input_file")
     output_file = cfg.get("inference", {}).get("output_file", "predictions.jsonl")
 
-    # === 2. ПАКЕТНАЯ ОБРАБОТКА ИЛИ ОДИНОЧНЫЙ ПРОГОН ===
+    # === 2. ПАКЕТНАЯ ИЛИ ОДИНОЧНАЯ ГЕНЕРАЦИЯ ===
     if input_file and Path(input_file).exists():
         logger.info("Запуск пакетного инференса (Batch) из файла: %s", input_file)
         with open(input_file, encoding="utf-8") as f:
@@ -98,12 +91,10 @@ def infer(cfg: DictConfig) -> None:
                 for q, gen in zip(queries, generated_texts)  # noqa B905
             )
         logger.info("Результаты сохранены в %s", output_file)
-
     else:
         query = cfg.text or "Объясни, что такое Retrieval-Augmented Generation (RAG)."
         logger.info("Запуск одиночной генерации...")
 
-        # === 3. ТЕЛЕМЕТРИЯ ГЕНЕРАЦИИ ===
         start_time = time.perf_counter()
         generated_texts = generator.generate([query])
         end_time = time.perf_counter()

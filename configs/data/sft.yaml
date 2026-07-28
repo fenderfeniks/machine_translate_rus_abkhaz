@@ -1,73 +1,49 @@
-# configs/data/sft.yaml
-# Сценарий 2: Supervised Fine-Tuning (суммаризация, Q&A, перевод, инструкции).
-# Переключить: data: sft в main.yaml
-
 defaults:
   - source: local
+  - splitter: default
+  - collator: sft
+  - transforms/cleaning: default
+  - transforms/validation: default
+  - transforms/deduplication: minhash
+  - transforms/tokenization: default
+  - transforms/filtering: default
   - _self_
 
-paths: ${paths}
-seed: ${seed}
-
 dataset_name: "sft_dataset"
-max_length: 512
-val_split_size: 0.1
-force_reprocess: false
+seed: ${seed}               # Тянем из корня
 max_samples: null
-prompt_column: "ru"
-target_column: "ab"
-# Наличие prompt_column используется коллбэком для auto-определения режима SFT.
+force_reprocess: false
 
-preprocessing_num_workers: 4
-preprocessing_batch_size: 1000
-writer_batch_size: 200
+val_size: 0.1
+test_size: 0.1
 
-transforms:
-  # 1. Сначала очищаем текст от мусора
-  - _target_: src.core.data.transforms.CleaningTransform
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    prompt_column: ${data.prompt_column}
-    target_column: ${data.target_column}
-    cleaners:
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "\\s{3,}"
-        replacement: " "
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "<[^>]+>"
-        replacement: ""
-      - _target_: src.core.data.cleaners.RegexCleaner
-        pattern: "http[s]?://\\S+"
-        replacement: ""
+text_column: null
+prompt_column: "prompt"
+target_column: "target"
 
-  - _target_: src.core.data.transforms.ValidationTransform
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    prompt_column: ${data.prompt_column}
-    target_column: ${data.target_column}
+max_length: ${max_length}   # Тянем из корня
+num_proc: ${system.num_proc} # Тянем из настроек системы
+batch_size: 1000
 
-  - _target_: src.core.data.transforms.TokenizationTransform
-    use_chat_template: false    # true если датасет в формате messages []
-    prompt_column: ${data.prompt_column}
-    target_column: ${data.target_column}
-    separator: "\n"
-    num_proc: ${data.preprocessing_num_workers}
-    batch_size: ${data.preprocessing_batch_size}
-    writer_batch_size: ${data.writer_batch_size}
+cleaner:
+  _target_: src.core.data.cleaners.TextCleaningPipeline
+  cleaners: []
 
-  - _target_: src.core.data.transforms.LengthFilterTransform
-    max_length: ${data.max_length}
-    num_proc: ${data.preprocessing_num_workers}
-
-# InstructionDataCollator: маскирует промпт, loss считается только по ответу
-collator:
-  _target_: src.core.data.collators.InstructionDataCollator
-  max_sequence_length: ${data.max_length}
-  mask_prompt: true
-  # response_template: "<|im_start|>assistant\n"  # раскомментировать для Варианта Б
+# Вся логика путей ушла в ${paths}
+paths:
+  # Мы можем добавить специфичный префикс для SFT
+  processed_data_dir: "${paths.processed_data_dir}/sft"
 
 dataloader:
-  _target_: torch.utils.data.DataLoader
   batch_size: 8
-  num_workers: 0
-  pin_memory: false
+  num_workers: ${system.num_workers} # Тянем из настроек системы
+  pin_memory: ${system.pin_memory}
+# ==========================================
+# ГРУППА 4: ПАРАМЕТРЫ ТРАНСФОРМАЦИЙ (токенизация, паковка)
+# Требуются transforms/tokenization и transforms/packing
+# ==========================================
+use_chat_template: false      # true — форматировать через tokenizer.apply_chat_template
+messages_column: null         # Колонка с историей диалога в формате [{role, content}]
+separator: "\n\n"             # Разделитель между prompt и target при конкатенации
+writer_batch_size: 1000       # Размер батча при записи в Arrow (datasets внутренний)
+drop_remainder: false         # Выбрасывать ли неполный последний чанк при паковке
