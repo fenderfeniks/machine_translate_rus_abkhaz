@@ -1,5 +1,5 @@
 # @package data.source
-#_target_: src.core.data.mixers.InterleavedDataFetcher
+_target_: src.core.data.mixers.InterleavedDataFetcher
 seed: ${seed}
 stopping_strategy: "first_exhausted"
 probabilities:

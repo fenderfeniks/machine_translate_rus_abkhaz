@@ -1,5 +1,5 @@
 # configs/data/source/local.yaml
-#_target_: src.core.data.fetcher.RawDataFetcher
+_target_: src.core.data.fetcher.RawDataFetcher
 source_type: "local"
 raw_dir: "${paths.data_dir}/raw"
 file_name: "ab-mono.txt"        # Расширение определяет формат автоматически
