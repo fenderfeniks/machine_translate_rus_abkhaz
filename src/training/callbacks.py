@@ -37,46 +37,65 @@ class GenerationEvaluationCallback(pl.Callback):
 
         self._resolved_mode: str | None = None
         self.rouge_metric: Any | None = None
+        self.bleu_metric: Any | None = None
         self.generator = None
-        self.val_raw_dataset: list[dict[str, str]] = []
+
+        # Разделяем датасеты для валидации и теста
+        self.eval_datasets: dict[str, list[dict[str, str]]] = {"val": [], "test": []}
 
     def _resolve_mode(self, data_cfg: Any) -> str:
         if self.mode != _MODE_AUTO:
             return self.mode
 
-        # Проверяем, что ключ есть И его значение не None
+        task_val = None
         if isinstance(data_cfg, dict):
-            has_prompt = data_cfg.get("prompt_column") is not None
+            task_val = data_cfg.get("task")
         else:
-            has_prompt = getattr(data_cfg, "prompt_column", None) is not None
+            task_val = getattr(data_cfg, "task", None)
 
-        resolved = _MODE_SFT if has_prompt else _MODE_CPT
+        if task_val in [_MODE_SFT, _MODE_CPT]:
+            resolved = task_val
+        else:
+            if isinstance(data_cfg, dict):
+                has_prompt = bool(data_cfg.get("prompt_column"))
+            else:
+                has_prompt = bool(getattr(data_cfg, "prompt_column", None))
+            resolved = _MODE_SFT if has_prompt else _MODE_CPT
+
         logger.info(f"GenerationEvaluationCallback: mode=auto → resolved={resolved}")
         return resolved
 
-    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def _setup_eval_env(
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str
+    ) -> None:
+        """Инициализирует генератор и подготавливает нужный датасет (val или test)."""
         from src.core.inference.generator import HFTextGenerator
 
-        self.generator = HFTextGenerator(
-            model=pl_module.model,
-            tokenizer=trainer.datamodule.tokenizer,
-            generation_kwargs=self.generation_kwargs,
-        )
+        if self.generator is None:
+            self.generator = HFTextGenerator(
+                model=pl_module.model,
+                tokenizer=trainer.datamodule.tokenizer,
+                generation_kwargs=self.generation_kwargs,
+            )
 
         data_cfg = trainer.datamodule.data_cfg
-        self._resolved_mode = self._resolve_mode(data_cfg)
+        if self._resolved_mode is None:
+            self._resolved_mode = self._resolve_mode(data_cfg)
 
-        # Оптимизация: берем датасет напрямую из DataModule, если он там есть
-        if hasattr(trainer.datamodule, "datasets") and "validation" in trainer.datamodule.datasets:
-            val_raw = trainer.datamodule.datasets["validation"]
+        dataset_key = "validation" if stage == "val" else "test"
+
+        if hasattr(trainer.datamodule, "datasets") and dataset_key in trainer.datamodule.datasets:
+            raw_data = trainer.datamodule.datasets[dataset_key]
         else:
             from hydra.utils import instantiate
 
-            logger.warning("Сырой датасет не найден в памяти, загружаем с диска (source)...")
+            logger.warning(
+                f"Сырой датасет '{dataset_key}' не найден в памяти, загружаем с диска (source)..."
+            )
             raw_datasets = instantiate(data_cfg.source).load()
-            val_raw = raw_datasets.get("validation", raw_datasets["train"])
+            raw_data = raw_datasets.get(dataset_key, raw_datasets["train"])
 
-        n = min(self.num_random * 10, len(val_raw))
+        n = min(self.num_random * 10, len(raw_data))
 
         if self._resolved_mode == _MODE_CPT:
             text_col = (
@@ -84,8 +103,8 @@ class GenerationEvaluationCallback(pl.Callback):
                 if isinstance(data_cfg, dict)
                 else getattr(data_cfg, "text_column", "text")
             )
-            self.val_raw_dataset = [
-                {"prompt": val_raw[i][text_col][:200], "response": ""} for i in range(n)
+            self.eval_datasets[stage] = [
+                {"prompt": raw_data[i][text_col][:200], "response": ""} for i in range(n)
             ]
         else:
             prompt_col = (
@@ -98,17 +117,26 @@ class GenerationEvaluationCallback(pl.Callback):
                 if isinstance(data_cfg, dict)
                 else getattr(data_cfg, "target_column", "completion")
             )
-            self.val_raw_dataset = [
-                {"prompt": val_raw[i][prompt_col], "response": val_raw[i][target_col]}
+            self.eval_datasets[stage] = [
+                {"prompt": raw_data[i][prompt_col], "response": raw_data[i][target_col]}
                 for i in range(n)
             ]
-            self.rouge_metric = evaluate.load("rouge")
+            if self.rouge_metric is None:
+                self.rouge_metric = evaluate.load("rouge")
+            if self.bleu_metric is None:
+                self.bleu_metric = evaluate.load("sacrebleu")
 
         if trainer.logger and hasattr(trainer.logger, "experiment"):
             mlflow_client = trainer.logger.experiment
             run_id = trainer.logger.run_id
             mlflow_client.set_tag(run_id, "model_architecture", self.model_name)
             mlflow_client.set_tag(run_id, "task_type", f"causal_lm_{self._resolved_mode}")
+
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._setup_eval_env(trainer, pl_module, stage="val")
+
+    def on_test_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._setup_eval_env(trainer, pl_module, stage="test")
 
     def _extract_rouge_score(self, score: Any) -> float:
         if hasattr(score, "mid"):
@@ -123,16 +151,12 @@ class GenerationEvaluationCallback(pl.Callback):
             chunk_prompts = prompts[i : i + self.generation_batch_size]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            # Явный no_grad обязателен: Lightning не гарантирует отключение
-            # градиентного графа внутри кастомных callback-методов (в отличие от
-            # validation_step где это делается автоматически). Без этого генерация
-            # строит граф вычислений → OOM на длинных последовательностях.
             with torch.no_grad():
                 chunk_generated = self.generator.generate(chunk_prompts, **self.generation_kwargs)
             generated_texts.extend(chunk_generated)
         return generated_texts
 
-    def _log_mlflow_table(self, trainer: pl.Trainer, df: pd.DataFrame) -> None:
+    def _log_mlflow_table(self, trainer: pl.Trainer, df: pd.DataFrame, stage: str) -> None:
         if not (trainer.logger and hasattr(trainer.logger, "experiment")):
             return
 
@@ -142,39 +166,59 @@ class GenerationEvaluationCallback(pl.Callback):
         mlflow_client.log_table(
             run_id=run_id,
             data=df,
-            artifact_file=f"generations/step_{step}_results.json",
+            artifact_file=f"generations/{stage}_step_{step}_results.json",
         )
 
-    def _run_sft_eval(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        actual_num_random = min(self.num_random, len(self.val_raw_dataset))
-        random_raw = random.sample(self.val_raw_dataset, actual_num_random)
+    def _run_sft_eval(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str) -> None:
+        dataset = self.eval_datasets[stage]
+        actual_num_random = min(self.num_random, len(dataset))
+        random_raw = random.sample(dataset, actual_num_random)
 
         random_samples = [
             {"prompt": item["prompt"], "target": item["response"], "type": "Random"}
             for item in random_raw
         ]
-        fixed_samples = [
-            {"prompt": item["prompt"], "target": item["target"], "type": "Fixed"}
-            for item in self.fixed_samples
-        ]
+
+        # Фиксированные примеры логируем только на валидации
+        if stage == "val" and self.fixed_samples:
+            fixed_samples = [
+                {"prompt": item["prompt"], "target": item["target"], "type": "Fixed"}
+                for item in self.fixed_samples
+            ]
+        else:
+            fixed_samples = []
 
         eval_batch = fixed_samples + random_samples
+        if not eval_batch:
+            return
+
         prompts = [s["prompt"] for s in eval_batch]
         targets = [s["target"] for s in eval_batch]
         sample_types = [s["type"] for s in eval_batch]
 
         generated_texts = self._generate_chunks(prompts)
 
+        # ROUGE
         rouge_results = self.rouge_metric.compute(
             predictions=generated_texts, references=targets, use_stemmer=True
         )
         val_rouge1 = self._extract_rouge_score(rouge_results["rouge1"])
-        val_rougeL = self._extract_rouge_score(rouge_results["rougeL"])  # noqa N816
+        val_rougeL = self._extract_rouge_score(rouge_results["rougeL"])
+
+        # BLEU (оборачиваем таргеты в списки для sacrebleu)
+        formatted_targets = [[t] for t in targets]
+        bleu_results = self.bleu_metric.compute(
+            predictions=generated_texts, references=formatted_targets
+        )
+        val_bleu = bleu_results["score"]
+
         avg_gen_len = sum(len(t.split()) for t in generated_texts) / len(generated_texts)
 
-        pl_module.log("val_rouge1", val_rouge1, sync_dist=True)
-        pl_module.log("val_rougeL", val_rougeL, sync_dist=True)
-        pl_module.log("val_avg_gen_length", avg_gen_len, sync_dist=True)
+        # Вывод в консоль с динамическим префиксом (val_ или test_)
+        pl_module.log(f"{stage}_rouge1", val_rouge1, sync_dist=True, prog_bar=True)
+        pl_module.log(f"{stage}_rougeL", val_rougeL, sync_dist=True, prog_bar=True)
+        pl_module.log(f"{stage}_bleu", val_bleu, sync_dist=True, prog_bar=True)
+        pl_module.log(f"{stage}_avg_gen_length", avg_gen_len, sync_dist=True)
 
         df = pd.DataFrame(
             {
@@ -184,17 +228,21 @@ class GenerationEvaluationCallback(pl.Callback):
                 "Generated": generated_texts,
             }
         )
-        self._log_mlflow_table(trainer, df)
+        self._log_mlflow_table(trainer, df, stage)
 
-    def _run_cpt_eval(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        actual_num_random = min(self.num_random, len(self.val_raw_dataset))
-        random_raw = random.sample(self.val_raw_dataset, actual_num_random)
+    def _run_cpt_eval(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str) -> None:
+        dataset = self.eval_datasets[stage]
+        actual_num_random = min(self.num_random, len(dataset))
+        random_raw = random.sample(dataset, actual_num_random)
         prompts = [item["prompt"] for item in random_raw]
+
+        if not prompts:
+            return
 
         generated_texts = self._generate_chunks(prompts)
 
         avg_gen_len = sum(len(t.split()) for t in generated_texts) / len(generated_texts)
-        pl_module.log("val_avg_gen_length", avg_gen_len, sync_dist=True)
+        pl_module.log(f"{stage}_avg_gen_length", avg_gen_len, sync_dist=True, prog_bar=True)
 
         df = pd.DataFrame(
             {
@@ -202,25 +250,34 @@ class GenerationEvaluationCallback(pl.Callback):
                 "Generated continuation": generated_texts,
             }
         )
-        self._log_mlflow_table(trainer, df)
+        self._log_mlflow_table(trainer, df, stage)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        # _resolved_mode=None означает что on_fit_start ещё не отработал.
-        # Это происходит при num_sanity_val_steps > 0: Lightning прогоняет
-        # валидацию ДО fit, чтобы поймать ошибки конфига — без инициализации генератора.
+        if self._resolved_mode is None or trainer.sanity_checking:
+            return
+
+        logger.info(
+            f"GenerationEvaluationCallback: запуск валидации в режиме {self._resolved_mode}..."
+        )
+
+        if self._resolved_mode == _MODE_SFT:
+            self._run_sft_eval(trainer, pl_module, stage="val")
+        else:
+            self._run_cpt_eval(trainer, pl_module, stage="val")
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def on_test_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if self._resolved_mode is None:
             return
 
-        # Пропускаем sanity-check эпохи (trainer.sanity_checking — флаг Lightning)
-        if trainer.sanity_checking:
-            return
-
-        logger.info(f"GenerationEvaluationCallback: запуск в режиме {self._resolved_mode}...")
+        logger.info(f"GenerationEvaluationCallback: запуск теста в режиме {self._resolved_mode}...")
 
         if self._resolved_mode == _MODE_SFT:
-            self._run_sft_eval(trainer, pl_module)
+            self._run_sft_eval(trainer, pl_module, stage="test")
         else:
-            self._run_cpt_eval(trainer, pl_module)
+            self._run_cpt_eval(trainer, pl_module, stage="test")
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

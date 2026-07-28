@@ -134,6 +134,7 @@ class DataConfig:
     collator: DataCollatorConfig = field(default_factory=DataCollatorConfig)
     dataloader: DataLoaderConfig = field(default_factory=DataLoaderConfig)
 
+    task: str = ""
     # Базовые настройки
     dataset_name: str = "nlp_dataset"
     seed: int = "${seed}"  # type: ignore[assignment]  # тянем из корня

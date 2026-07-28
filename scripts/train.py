@@ -28,21 +28,14 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_mlflow_run_id(trainer: pl.Trainer) -> str | None:
-    """Извлекает run_id из MLFlowLogger до удаления тренера.
-
-    MLFlowLogger закрывает run при удалении объекта, поэтому run_id
-    нужно сохранить до вызова del trainer.
-    """
     if not trainer.logger:
         return None
 
-    # Публичное свойство MLFlowLogger (lightning >= 2.0)
     for attr in ("run_id", "_run_id", "runid"):
         val = getattr(trainer.logger, attr, None)
         if val:
             return val
 
-    # Fallback: активный run через mlflow SDK
     try:
         import mlflow
 
@@ -60,19 +53,13 @@ def _run_post_training_evaluation(
     model_module: CausalLMLightningModule,
     datamodule: pl.LightningDataModule,
 ) -> float | None:
-    """Загружает лучший чекпоинт (если есть) и запускает тест на отложенной выборке."""
-
     best_ckpt_path = trainer.checkpoint_callback.best_model_path
 
     if not best_ckpt_path:
         logger.warning("Лучший чекпоинт не найден. Запускаем тест на текущих весах (last state)...")
         trainer.test(model=model_module, datamodule=datamodule)
-
-        # Возвращаем None, чтобы таблица вывелась,
-        # но скрипт пропустил регистрацию модели в MLflow
         return None
 
-    # Дальше идет твой стандартный код загрузки LoRA
     register_safe_globals()
     logger.info("Загрузка лучших весов из %s...", best_ckpt_path)
 
@@ -89,20 +76,9 @@ def _run_post_training_evaluation(
 
 @hydra.main(config_path="../configs", config_name="main", version_base="1.3")
 def train(cfg: DictConfig) -> None:
-    """Оркестратор обучения Causal LM.
-
-    Порядок инициализации:
-      1. Конфиг и seed
-      2. Токенизатор → Модель (с опциональным LoRA-resume)
-      3. DataModule
-      4. LightningModule + torch.compile (опционально)
-      5. Trainer (callbacks и logger подтягиваются из конфига Hydra)
-      6. trainer.fit → post-training eval → MLflow регистрация
-    """
     cfg = setup_config(cfg)
     logger.info("Старт обучения...")
 
-    # Ранняя проверка: не тратить время на загрузку модели если GPU недоступен
     if cfg.trainer.accelerator == "gpu" and not torch.cuda.is_available():
         raise RuntimeError(
             "cfg.trainer.accelerator='gpu', но CUDA недоступна. "
@@ -116,33 +92,39 @@ def train(cfg: DictConfig) -> None:
     tokenizer = hydra.utils.instantiate(cfg.model.tokenizer).build()
 
     # ── 2. Модель ────────────────────────────────────────────────────────────
-    # resolve_lora_resume_path: ищет адаптер в MLflow Registry или локальном пути
     lora_resume_path = resolve_lora_resume_path(cfg.model.get("lora_resume", {}))
 
     logger.info("Сборка модели...")
-    # Инстанциируем только вложенный конфигуратор билдера
     builder = hydra.utils.instantiate(cfg.model.builder)
     builder.lora_resume_path = lora_resume_path
-
-    # Модификаторы остались на верхнем уровне cfg.model, прокидываем их вручную
     builder.modifiers_cfg = cfg.model.get("modifiers")
     base_model = builder.build(tokenizer=tokenizer)
 
     # ── 3. DataModule ─────────────────────────────────────────────────────────
     logger.info("Инициализация DataModule...")
-
-    # 1. Собираем коллатор отдельно, передавая ему runtime-токенизатор
-    # collator = hydra.utils.instantiate(cfg.data.collator, tokenizer=tokenizer)
-
-    # 2. Передаем готовый коллатор и токенизатор в датамодуль
     datamodule = NLPDataModule(data_cfg=cfg.data, tokenizer=tokenizer)
 
-    # ── 4. LightningModule ────────────────────────────────────────────────────
+    # ── 4. LightningModule (с определением task_mode) ─────────────────────────
+    data_cfg = cfg.data
+    task_val = (
+        data_cfg.get("task") if isinstance(data_cfg, dict) else getattr(data_cfg, "task", None)
+    )
+
+    if task_val in ["sft", "cpt"]:
+        task_mode = task_val
+    else:
+        has_prompt = (
+            bool(data_cfg.get("prompt_column"))
+            if isinstance(data_cfg, dict)
+            else bool(getattr(data_cfg, "prompt_column", None))
+        )
+        task_mode = "sft" if has_prompt else "cpt"
+
     model_module = CausalLMLightningModule(
         model=base_model,
-        # Инстанцируем конфиги здесь, чтобы они стали partial-функциями
         optimizer_cfg=hydra.utils.instantiate(cfg.optimizer),
         scheduler_cfg=hydra.utils.instantiate(cfg.scheduler) if "scheduler" in cfg else None,
+        task_mode=task_mode,
     )
 
     if cfg.model.get("compile", False):
@@ -150,8 +132,6 @@ def train(cfg: DictConfig) -> None:
         model_module.model = torch.compile(model_module.model)
 
     # ── 5. Trainer ────────────────────────────────────────────────────────────
-    # Callbacks и logger объявлены в configs/trainer/ и подтягиваются Hydra.
-    # instantiate рекурсивно создаёт все вложенные объекты (_target_ + параметры).
     logger.info("Инициализация Trainer...")
     trainer = hydra.utils.instantiate(cfg.trainer)
 
@@ -176,7 +156,6 @@ def train(cfg: DictConfig) -> None:
         logger.exception("Критическая ошибка во время обучения:")
         raise
     finally:
-        # run_id извлекаем ДО del trainer — MLFlowLogger закрывает run при удалении
         mlflow_run_id = _extract_mlflow_run_id(trainer)
         logger.info("MLflow run_id: %s", mlflow_run_id)
 
@@ -189,7 +168,6 @@ def train(cfg: DictConfig) -> None:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        # Регистрируем только если обучение дало осмысленный результат
         is_peft = isinstance(base_model, PeftModel)
         if is_peft and best_score is not None and mlflow_run_id is not None:
             log_lora_to_mlflow(

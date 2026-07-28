@@ -9,6 +9,8 @@ defaults:
   - transforms/filtering: default
   - _self_
 
+task: "sft"
+
 dataset_name: "sft_dataset"
 seed: ${seed}               # Тянем из корня
 max_samples: null
@@ -18,8 +20,8 @@ val_size: 0.1
 test_size: 0.1
 
 text_column: null
-prompt_column: "prompt"
-target_column: "target"
+prompt_column: "ru"
+target_column: "ab"
 
 max_length: ${max_length}   # Тянем из корня
 num_proc: ${system.num_proc} # Тянем из настроек системы
@@ -44,6 +46,6 @@ dataloader:
 # ==========================================
 use_chat_template: false      # true — форматировать через tokenizer.apply_chat_template
 messages_column: null         # Колонка с историей диалога в формате [{role, content}]
-separator: "\n\n"             # Разделитель между prompt и target при конкатенации
+separator: ","             # Разделитель между prompt и target при конкатенации
 writer_batch_size: 1000       # Размер батча при записи в Arrow (datasets внутренний)
 drop_remainder: false         # Выбрасывать ли неполный последний чанк при паковке

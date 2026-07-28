@@ -22,13 +22,21 @@ class CausalLMLightningModule(pl.LightningModule):
         model: torch.nn.Module,
         optimizer_cfg: Any,
         scheduler_cfg: Any | None = None,
+        task_mode: str = "cpt",
     ) -> None:
         super().__init__()
         self.model = model
         self.optimizer_cfg = optimizer_cfg
         self.scheduler_cfg = scheduler_cfg
+        self.task_mode = task_mode
 
-        self.save_hyperparameters(ignore=["model"])
+        # Маршрутизация метрик: избегаем if/else на каждом шаге
+        if self.task_mode == "cpt":
+            self._compute_extra_metrics = self._log_perplexity
+        else:
+            self._compute_extra_metrics = lambda loss, phase: None
+
+        self.save_hyperparameters(ignore=["model", "_compute_extra_metrics"])
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Модифицирует чекпоинт перед сохранением на диск.
@@ -40,13 +48,10 @@ class CausalLMLightningModule(pl.LightningModule):
         from peft.utils import get_peft_model_state_dict
 
         if isinstance(self.model, PeftModel):
-            # Встроенная и самая безопасная функция PEFT для фильтрации
-            # state_dict, которая учитывает как lora_A/B, так и modules_to_save
             checkpoint["state_dict"] = get_peft_model_state_dict(
                 self.model, state_dict=checkpoint["state_dict"]
             )
         else:
-            # Full Fine-Tuning — оставляем чекпоинт как есть
             pass
 
     def forward(
@@ -67,44 +72,37 @@ class CausalLMLightningModule(pl.LightningModule):
         if loss is None:
             raise ValueError("Модель не вернула loss. Проверь передачу labels из коллатора.")
 
-        # Фундаментальный guard: NaN/Inf в loss убивает обучение без диагноза.
-        # При BF16 + длинных последовательностях это случается на редких батчах
-        # с экстремально высокой энтропией. Пропускаем батч вместо краша.
         if not torch.isfinite(loss):
             logger.warning(
                 "batch_idx=%d: loss=%s — пропускаем батч (возврат None).", batch_idx, loss.item()
             )
-            return None  # Lightning корректно обрабатывает None из training_step
+            return None
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
+
+    def _log_perplexity(self, loss: torch.Tensor, phase: str) -> None:
+        try:
+            perplexity = torch.exp(loss)
+            self.log(f"{phase}_perplexity", perplexity, on_epoch=True, prog_bar=True, logger=True)
+        except OverflowError:
+            self.log(f"{phase}_perplexity", float("inf"), on_epoch=True, prog_bar=True, logger=True)
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
         outputs = self(**batch)
         loss = outputs.loss
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
-
-        try:
-            perplexity = torch.exp(loss)
-            self.log("val_perplexity", perplexity, on_epoch=True, prog_bar=True, logger=True)
-        except OverflowError:
-            self.log("val_perplexity", float("inf"), on_epoch=True, prog_bar=True, logger=True)
+        self._compute_extra_metrics(loss, "val")
 
     def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
         outputs = self(**batch)
         loss = outputs.loss
 
         self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True)
-
-        try:
-            perplexity = torch.exp(loss)
-            self.log("test_perplexity", perplexity, on_epoch=True, prog_bar=True, logger=True)
-        except OverflowError:
-            self.log("test_perplexity", float("inf"), on_epoch=True, prog_bar=True, logger=True)
+        self._compute_extra_metrics(loss, "test")
 
     def configure_optimizers(self) -> dict[str, Any] | torch.optim.Optimizer:
-        # Собираем только те параметры, которые разморозил ModelBuilder/Modifiers
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
 
         if not trainable_params:
@@ -119,15 +117,10 @@ class CausalLMLightningModule(pl.LightningModule):
             return optimizer
 
         if callable(self.scheduler_cfg):
-            # estimated_stepping_batches корректно работает только когда тренер
-            # уже знает max_steps или max_epochs + dataloader size.
-            # При переходе на max_steps-режим это значение надёжно только после
-            # trainer.fit() → используем его напрямую как num_training_steps.
             total_steps = self.trainer.estimated_stepping_batches
             if total_steps == float("inf"):
                 raise ValueError(
-                    "estimated_stepping_batches=inf: задайте max_steps в конфиге тренера. "
-                    "Обучение по эпохам без ограничения шагов несовместимо с LR-scheduler."
+                    "estimated_stepping_batches=inf: задайте max_steps в конфиге тренера."
                 )
             scheduler = self.scheduler_cfg(optimizer=optimizer, num_training_steps=total_steps)
         else:

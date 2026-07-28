@@ -28,6 +28,7 @@ dependencies = [
     # Логирование и инфраструктура
     "python-json-logger>=2.0.0",
     "tomli>=2.0.0; python_version < '3.11'",
+    "sacrebleu>=2.6.0",
 ]
 
 [project.optional-dependencies]
