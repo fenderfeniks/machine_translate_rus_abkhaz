@@ -498,6 +498,7 @@ class PromptsConfig:
     rag_qa: str = ""
     summarization: str = ""
     translation: str = ""
+    telegram_welcome: str = ""
 
 
 @dataclass
