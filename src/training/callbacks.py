@@ -203,7 +203,7 @@ class GenerationEvaluationCallback(pl.Callback):
             predictions=generated_texts, references=targets, use_stemmer=True
         )
         val_rouge1 = self._extract_rouge_score(rouge_results["rouge1"])
-        val_rougeL = self._extract_rouge_score(rouge_results["rougeL"])
+        val_rougeL = self._extract_rouge_score(rouge_results["rougeL"])  # noqa
 
         # BLEU (оборачиваем таргеты в списки для sacrebleu)
         formatted_targets = [[t] for t in targets]
