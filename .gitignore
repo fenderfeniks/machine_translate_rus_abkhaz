@@ -39,6 +39,7 @@ mlruns/
 mlflow.db
 logs/**
 log/
+logs
 *.log
 
 # PyTorch Lightning & Models

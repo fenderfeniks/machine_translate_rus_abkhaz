@@ -14,5 +14,5 @@ filename: "step={step}-val_loss={val_loss:.4f}"
 # Сохранять чекпоинт синхронно с валидацией (val_check_interval в default.yaml).
 # every_n_train_steps должен быть кратен val_check_interval, иначе checkpoint
 # будет сохранён без актуального val_loss в имени файла (Lightning подставит 0.0).
-every_n_train_steps: 200
+every_n_train_steps: ${trainer.val_check_interval}
 save_on_train_epoch_end: false

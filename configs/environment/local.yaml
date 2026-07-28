@@ -12,8 +12,8 @@ environment:
 trainer:
   accelerator: "auto"           # CPU если нет GPU — не падает с ошибкой
   precision: "32-true"          # fp32 — стабильнее на CPU, не требует Ampere
-  max_steps: 20                 # Минимально для проверки цикла train→val→checkpoint
-  val_check_interval: 10        # Валидация на шаге 10 и 20
+  max_steps: 100                 # Минимально для проверки цикла train→val→checkpoint
+  val_check_interval: 50        # Валидация на шаге 10 и 20
   limit_train_batches: 1.0      # Убираем limit — управляем через max_steps
   limit_val_batches: 5          # 5 валидационных батчей достаточно для smoke-test
   accumulate_grad_batches: 1    # Без аккумуляции — быстрее итерация

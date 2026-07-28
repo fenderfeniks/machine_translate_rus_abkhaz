@@ -69,6 +69,7 @@ class MLFlowLoggerConfig:
     _target_: str = "lightning.pytorch.loggers.MLFlowLogger"
     experiment_name: str = "nlp_decoder_template"
     tracking_uri: str = "sqlite:///${paths.log_dir}/mlflow.db"
+    # artifact_location: str = "${paths.log_dir}/mlartifacts"
     run_name: str = "${now:%Y-%m-%d_%H-%M-%S}"
     log_model: bool = False
     tags: dict[str, str] = field(default_factory=lambda: {"env": "${environment.name}"})

@@ -60,16 +60,19 @@ def _run_post_training_evaluation(
     model_module: CausalLMLightningModule,
     datamodule: pl.LightningDataModule,
 ) -> float | None:
-    """Загружает лучший чекпоинт и запускает тест на отложенной выборке.
+    """Загружает лучший чекпоинт (если есть) и запускает тест на отложенной выборке."""
 
-    Returns:
-        Значение best_model_score или None если чекпоинт не найден.
-    """
     best_ckpt_path = trainer.checkpoint_callback.best_model_path
+
     if not best_ckpt_path:
-        logger.warning("Лучший чекпоинт не найден — оценка пропущена.")
+        logger.warning("Лучший чекпоинт не найден. Запускаем тест на текущих весах (last state)...")
+        trainer.test(model=model_module, datamodule=datamodule)
+
+        # Возвращаем None, чтобы таблица вывелась,
+        # но скрипт пропустил регистрацию модели в MLflow
         return None
 
+    # Дальше идет твой стандартный код загрузки LoRA
     register_safe_globals()
     logger.info("Загрузка лучших весов из %s...", best_ckpt_path)
 
@@ -77,7 +80,7 @@ def _run_post_training_evaluation(
     lora_state_dict = {k: v for k, v in checkpoint["state_dict"].items() if "lora_" in k}
     model_module.load_state_dict(lora_state_dict, strict=False)
 
-    logger.info("Тестирование на отложенной выборке...")
+    logger.info("Тестирование на отложенной выборке (best model)...")
     trainer.test(model=model_module, datamodule=datamodule)
 
     score = trainer.checkpoint_callback.best_model_score

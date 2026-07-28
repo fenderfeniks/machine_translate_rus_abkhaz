@@ -138,11 +138,11 @@ class GenerationEvaluationCallback(pl.Callback):
 
         mlflow_client = trainer.logger.experiment
         run_id = trainer.logger.run_id
-        epoch = trainer.current_epoch
+        step = trainer.global_step
         mlflow_client.log_table(
             run_id=run_id,
             data=df,
-            artifact_file=f"generations/epoch_{epoch}_results.json",
+            artifact_file=f"generations/step_{step}_results.json",
         )
 
     def _run_sft_eval(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
