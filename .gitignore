@@ -32,7 +32,7 @@ demo/data
 outputs/
 multirun/
 .hydra/
-
+mlartifacts
 # MLflow & Logs
 mlruns/
 *.db
