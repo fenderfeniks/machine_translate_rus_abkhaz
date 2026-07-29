@@ -159,7 +159,8 @@ def train(cfg: DictConfig) -> None:
         mlflow_run_id = _extract_mlflow_run_id(trainer)
         logger.info("MLflow run_id: %s", mlflow_run_id)
 
-        best_score = _run_post_training_evaluation(trainer, model_module, datamodule)
+        if not trainer.tested:  # атрибут есть в PL 2.x
+            best_score = _run_post_training_evaluation(trainer, model_module, datamodule)
 
         logger.info("Очистка памяти GPU...")
         del trainer

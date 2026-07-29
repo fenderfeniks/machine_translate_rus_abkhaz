@@ -23,23 +23,39 @@ logger = logging.getLogger(__name__)
 def merge_and_export(cfg: DictConfig) -> None:
     """Сливает LoRA адаптер с базовой моделью."""
 
-    # ИСПРАВЛЕНИЕ 2: Берем пути из новой структуры архитектуры
     base_model_name = cfg.model.architecture.model_name_or_path
     cache_dir = cfg.paths.hf_cache_dir
 
-    logger.info("Загрузка базовой модели: %s (cache_dir: %s)", base_model_name, cache_dir)
+    # Проверяем кеш перед загрузкой — HF хранит как models--<org>--<name>/
+    cache_path = Path(cache_dir) if cache_dir else None
+    if cache_path and cache_path.exists():
+        hf_cache_name = "models--" + base_model_name.replace("/", "--")
+        cached_model_dir = cache_path / hf_cache_name
+        if cached_model_dir.exists():
+            logger.info("Найден кеш базовой модели: %s — загружаем с диска.", cached_model_dir)
+        else:
+            logger.info(
+                "Кеш не найден (%s) — базовая модель будет скачана в %s.",
+                cached_model_dir,
+                cache_dir,
+            )
+    else:
+        logger.info("Загрузка базовой модели: %s (cache_dir: %s)", base_model_name, cache_dir)
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         cache_dir=cache_dir,
-        torch_dtype=torch.bfloat16,  # Лучше использовать bfloat16
+        torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         device_map="cpu",
     )
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_name, cache_dir=cache_dir)
 
-    # ИСПРАВЛЕНИЕ 3: Берем чистое имя MLflow оттуда же
+    # Берём tracking_uri из конфига Hydra — единственный источник правды
+    tracking_uri = cfg.logger.pylightning.tracking_uri
+    logger.info("MLflow tracking URI из конфига: %s", tracking_uri)
+
     mlflow_model_name = cfg.model.architecture.mlflow_model_name
 
     lora_cfg = OmegaConf.create(
@@ -47,12 +63,12 @@ def merge_and_export(cfg: DictConfig) -> None:
             "enabled": True,
             "model_name": f"{mlflow_model_name}_LoRA",
             "alias": "Staging",
-            "artifact_path": "lora_weights",
+            "artifact_path": cfg.logger.registry.artifact_path,
         }
     )
 
     logger.info("Поиск адаптера '%s' (алиас: %s)...", lora_cfg.model_name, lora_cfg.alias)
-    lora_path = resolve_lora_resume_path(lora_cfg)
+    lora_path = resolve_lora_resume_path(lora_cfg, tracking_uri=tracking_uri)
 
     logger.info("Навешивание LoRA адаптера на базовую модель...")
     model = PeftModel.from_pretrained(base_model, lora_path)
@@ -63,7 +79,6 @@ def merge_and_export(cfg: DictConfig) -> None:
     if getattr(merged_model.generation_config, "pad_token_id", None) in (None, -1):
         merged_model.generation_config.pad_token_id = tokenizer.eos_token_id
 
-    # Нормализуем имя для папки (если это был локальный путь, берем последнюю часть)
     model_short_name = Path(base_model_name).name
     output_path = Path(cfg.paths.root_dir) / "models" / f"merged_{model_short_name}"
     output_path.mkdir(parents=True, exist_ok=True)

@@ -34,7 +34,7 @@ class GenerationEvaluationCallback(pl.Callback):
         self.generation_kwargs = generation_kwargs or {}
         self.fixed_samples = fixed_samples or []
         self.mode = mode
-
+        self._env_ready: dict[str, bool] = {"val": False, "test": False}
         self._resolved_mode: str | None = None
         self.rouge_metric: Any | None = None
         self.bleu_metric: Any | None = None
@@ -69,6 +69,9 @@ class GenerationEvaluationCallback(pl.Callback):
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str
     ) -> None:
         """Инициализирует генератор и подготавливает нужный датасет (val или test)."""
+        if self._env_ready[stage]:
+            logger.info(f"_setup_eval_env: stage={stage} уже инициализирован, пропускаем.")
+            return
         from src.core.inference.generator import HFTextGenerator
 
         if self.generator is None:
@@ -131,6 +134,8 @@ class GenerationEvaluationCallback(pl.Callback):
             run_id = trainer.logger.run_id
             mlflow_client.set_tag(run_id, "model_architecture", self.model_name)
             mlflow_client.set_tag(run_id, "task_type", f"causal_lm_{self._resolved_mode}")
+
+        self._env_ready[stage] = True
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         self._setup_eval_env(trainer, pl_module, stage="val")
