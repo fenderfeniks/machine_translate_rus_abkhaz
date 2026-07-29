@@ -120,8 +120,18 @@ class GenerationEvaluationCallback(pl.Callback):
                 if isinstance(data_cfg, dict)
                 else getattr(data_cfg, "target_column", "completion")
             )
+            separator = (
+                data_cfg.get("separator", "")
+                if isinstance(data_cfg, dict)
+                else getattr(data_cfg, "separator", "")
+            )
             self.eval_datasets[stage] = [
-                {"prompt": raw_data[i][prompt_col], "response": raw_data[i][target_col]}
+                {
+                    # Добавляем separator к промпту — модель обучалась видеть
+                    # "ru_text + separator" перед абхазским текстом
+                    "prompt": raw_data[i][prompt_col] + separator,
+                    "response": raw_data[i][target_col],
+                }
                 for i in range(n)
             ]
             if self.rouge_metric is None:

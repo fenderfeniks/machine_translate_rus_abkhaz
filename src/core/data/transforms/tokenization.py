@@ -64,7 +64,10 @@ class TokenizationTransform(BaseDatasetTransform):
                     p + self.separator + r for p, r in zip(prompts, responses)
                 ]
                 encodings = self.tokenizer(full_texts, add_special_tokens=True)
-                prompt_encodings = self.tokenizer(prompts, add_special_tokens=False)
+                # Включаем separator в prompt_len — Loss считается только по target,
+                # separator является частью промпта и не должен обучаться
+                prompts_with_sep = [p + self.separator for p in prompts]
+                prompt_encodings = self.tokenizer(prompts_with_sep, add_special_tokens=False)
                 return {
                     "input_ids": encodings["input_ids"],
                     "attention_mask": encodings["attention_mask"],

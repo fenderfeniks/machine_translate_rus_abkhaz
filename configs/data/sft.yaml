@@ -46,6 +46,6 @@ dataloader:
 # ==========================================
 use_chat_template: false      # true — форматировать через tokenizer.apply_chat_template
 messages_column: null         # Колонка с историей диалога в формате [{role, content}]
-separator: ","             # Разделитель между prompt и target при конкатенации
+separator: "Перевод на абхазский: "             # Разделитель между prompt и target при конкатенации
 writer_batch_size: 1000       # Размер батча при записи в Arrow (datasets внутренний)
 drop_remainder: false         # Выбрасывать ли неполный последний чанк при паковке
